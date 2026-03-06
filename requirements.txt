@@ -1,0 +1,192 @@
+Pashabook 要件定義 v2
+1. プロジェクト概要
+プロダクト名（仮）
+Pashabook ― 子供の絵が、動く絵本になる。
+コンセプト
+子供が描いた絵を写真に撮るだけで、AIが自動でストーリーを生成し、キャラクターが動くナレーション付き絵本動画を作り上げるサービス。親も子も何も操作しなくてよい「ゼロ入力」体験を実現する。
+対応言語
+
+日本語 / English（UI・ストーリー・ナレーション）
+
+ターゲットユーザー
+
+主ユーザー: 3〜8歳の子供を持つ親
+利用シーン: 子供が描いた絵を記念に残したい、読み聞かせの時間を豊かにしたい
+
+
+2. ハッカソン要件との対応
+Gemini Live Agent Challenge 要件本プロジェクトでの対応Creative Storytellerカテゴリーテキスト・画像・音声・動画のInterleaved出力Gemini GenAI SDK または ADK 使用Gemini 2.0 Flash（画像理解・ストーリー生成）Google Cloud ホスティングCloud Functions + Cloud Run でバックエンドをデプロイInterleaved / mixed outputストーリー＋Imagen挿絵＋動画＋TTS音声を1パイプラインで生成
+
+3. 機能要件
+3.1 画像アップロード・解析
+
+FR-01: ユーザーは子供の描いた絵の画像（JPEG/PNG）をアップロードできる
+FR-02: Gemini 2.0 Flash が絵を解析し、以下を抽出する
+
+登場キャラクター（名前・特徴）
+背景・世界観
+画風・タッチ（例: クレヨン風、丸い、カラフル）
+感情トーン（楽しい、冒険、ほのぼの など）
+ハイライトページ番号（一番盛り上がる 1〜2 ページを自動選定）
+
+
+
+3.2 ストーリー自動生成
+
+FR-03: Gemini が絵の解析結果をもとに 5〜6 ページ構成のストーリーを自動生成する
+FR-04: 各ページはテキスト（読み聞かせ文）＋ページ用挿絵プロンプト＋アニメーションモード（standard / highlight）で構成される
+FR-05: 子供向けの平易な文体・語彙を使用する（対象年齢: 3〜8歳）
+FR-06: 日本語・英語のどちらでもストーリーを生成できる
+FR-07: Gemini のレスポンスに highlight_pages フィールドを含め、ハイライトページを自動決定する
+
+json{
+  "title": "ふしぎな森のたび",
+  "style_description": "クレヨン風、丸い、カラフル、温かみのある",
+  "characters": [
+    { "name": "もぐ", "description": "丸くてオレンジ色のモグラ" }
+  ],
+  "highlight_pages": [3, 5],
+  "story": [
+    { "page": 1, "text": "ある日、もぐは大きな木の根元で...", "image_prompt": "..." }
+  ]
+}
+3.3 挿絵生成
+
+FR-08: Imagen 3 が各ページのテキストと子供の絵のスタイル記述をもとに挿絵を生成する
+FR-09: 子供の元の絵のタッチ（画風）を継承したスタイルで統一感を持たせる
+FR-10: キャラクターの外見を全ページで一貫させる（キャラクター記述をプロンプトに固定）
+FR-11: 全ページの挿絵生成を並列実行する
+
+3.4 動画アニメーション生成（ハイブリッド方式）
+標準ページ：ケンバーンズ効果（FFmpeg）
+
+FR-12: highlight_pages 以外の全ページは FFmpeg によるケンバーンズ効果（Pan & Zoom）でアニメーション化する
+FR-13: ページごとにランダムでズームイン・ズームアウト・左右パンを使い分ける
+FR-14: 1ページあたり 4 秒のクリップを生成する
+FR-15: ページ間はクロスフェード（0.5秒）でつなぐ
+
+ハイライトページ：Veo 3.1 Fast
+
+FR-16: highlight_pages（1〜2ページ）は Veo 3.1 Fast でリッチなアニメーション動画を生成する
+FR-17: Veo 3.1 Fast の生成は非同期で実行し、完了次第クリップを差し替える
+FR-18: Veo 3.1 Fast が失敗した場合はケンバーンズにフォールバックする
+
+3.5 ナレーション音声生成
+
+FR-19: Google Cloud Text-to-Speech がストーリーテキストをやさしい声でナレーション化する
+FR-20: 日本語は日本語話者の声、英語は英語話者の声を使用する
+FR-21: ナレーション音声を動画と同期して合成する
+
+3.6 絵本動画の出力
+
+FR-22: 完成した絵本動画（MP4）をダウンロードできる
+FR-23: 生成完了後にプレビュー再生できる
+FR-24: 共有用リンクを発行できる（将来対応）
+
+
+4. 非機能要件
+項目要件生成時間アップロードから動画完成まで 3 分以内（目標）対応画像サイズ最大 10MB、最小 500×500px動画解像度720p（1280×720）同時リクエストハッカソン用途のため 10 件程度セキュリティアップロード画像・生成動画は 24 時間で自動削除デプロイ環境Google Cloud（Cloud Functions + Cloud Run）多言語UI・ストーリー・ナレーション：日本語 / English
+
+5. 技術スタック
+AI / ML
+役割サービス絵の解析・ストーリー生成・ハイライト選定Gemini 2.0 Flash（Google GenAI SDK）挿絵生成Imagen 3（Vertex AI）ハイライト動画生成Veo 3.1 Fast（fal.ai 経由）標準動画生成FFmpeg ケンバーンズ効果（Cloud Run上）ナレーション音声生成Google Cloud Text-to-Speech
+バックエンド
+役割技術受付 APICloud Functions（gen2）パイプライン実行Cloud Run（Docker + FFmpeg）ジョブキューCloud Tasksジョブ状態管理FirestoreストレージGoogle Cloud Storage
+フロントエンド
+役割技術UIReact（Next.js）または シングルHTMLスタイルTailwind CSS動画プレビューHTML5 Video言語切り替えi18n（ja / en）
+
+6. システムアーキテクチャ
+[ユーザー (ブラウザ)]
+  │  言語選択（ja/en）+ 画像アップロード
+  ▼
+[フロントエンド (Next.js / Cloud Run)]
+  │ POST /generate { image, language }
+  ▼
+[Cloud Functions: 受付 API]
+  │ jobId を即返却
+  │ Cloud Tasks にエンキュー
+  ▼
+[Cloud Tasks]
+  │
+  ▼
+[Cloud Run: パイプライン実行]
+  │
+  ├─① Gemini 2.0 Flash
+  │     └ 絵の解析 → キャラクター・スタイル・感情トーン抽出
+  │     └ ストーリー生成（5〜6ページ）+ highlight_pages 決定
+  │     └ 言語: ja / en
+  │
+  ├─② Imagen 3（全ページ 並列）
+  │     └ 各ページの挿絵生成（スタイル・キャラクター継承）
+  │
+  ├─③ アニメーション生成（並列）
+  │     ├─ 標準ページ  →  FFmpeg ケンバーンズ（$0）
+  │     └─ ハイライトページ  →  Veo 3.1 Fast（fal.ai）
+  │                               └ 失敗時 → FFmpeg にフォールバック
+  │
+  ├─④ Google Cloud TTS
+  │     └ ストーリーテキスト → ナレーション音声（ja/en）
+  │
+  └─⑤ FFmpeg 動画合成（Cloud Run）
+        └ クリップ連結 + クロスフェード + 音声同期 → MP4
+                │
+                ▼
+       [Cloud Storage]
+        完成MP4 + 署名付きURL（24時間有効）
+                │
+                ▼
+       [Firestore] ジョブ状態更新 → "done"
+                │
+                ▼
+       [フロントエンド: ポーリング]
+        → プレビュー再生 🎬 → ダウンロード
+Firestore データ設計
+jobs/{jobId}
+  ├── status         : "pending" | "processing" | "done" | "error"
+  ├── language       : "ja" | "en"
+  ├── imageUrl       : gs://bucket/original/xxx.jpg
+  ├── highlight_pages: [3, 5]
+  ├── story: [
+  │     {
+  │       page     : 1,
+  │       text     : "ある日、もぐは...",
+  │       imageUrl : "gs://...",
+  │       videoUrl : "gs://...",
+  │       mode     : "standard" | "highlight"
+  │     }, ...
+  │   ]
+  ├── finalVideoUrl  : gs://bucket/output/xxx.mp4
+  ├── createdAt      : timestamp
+  └── updatedAt      : timestamp
+
+7. ユーザーフロー
+1. 言語を選択（ja / en）🌐
+2. 子供が紙に絵を描く 🖍️
+3. 親がスマホ/PCで絵を撮影・アップロード 📸
+4. 「絵本を作る」ボタンをタップ（これだけ！）
+5. 生成中アニメーション表示
+     [解析中 → ストーリー生成中 → 挿絵生成中 → 動画生成中]
+6. 完成！プレビュー再生 🎬
+     （ハイライトページだけリッチなVeo 3.1アニメーション）
+7. ダウンロード 📥
+
+8. 画面構成（最小構成）
+画面内容① ホーム / アップロード言語切り替え（ja/en）、絵のアップロードエリア、「絵本を作る」ボタン② 生成中プログレスバー、各ステップの状態表示③ 完成動画プレビュー、ダウンロードボタン、ストーリーテキスト表示
+
+9. コスト試算
+1冊あたりのコスト
+工程詳細コストGemini 2.0 Flash解析・生成 ~3,000トークン~$0.002Imagen 3挿絵 × 6枚（$0.04/枚）$0.24Veo 3.1 Fastハイライト 2ページ × 4秒 = 8秒（$0.10/秒）$0.80FFmpeg ケンバーンズ標準 4ページ × 4秒$0Cloud TTSナレーション ~500文字~$0.002Cloud Run / Storage軽微~$0.05合計~$1.09 / 冊
+ハッカソン期間中の総費用見込み
+フェーズ想定生成数費用開発・テスト（ケンバーンズのみ）30〜50冊~$9〜$15Veo 3.1 込みテスト10〜20冊~$11〜$22デモ撮影5〜10冊~$6〜$11合計~$26〜$48
+
+✅ 新規GCPアカウントの $300クレジットで完全カバー可能
+
+
+10. 開発フェーズ（ハッカソン向け）
+フェーズ内容優先度Phase 1Gemini による絵の解析 + ストーリー生成 + highlight_pagesMustPhase 2Imagen 3 による挿絵生成（並列）MustPhase 3FFmpeg ケンバーンズ動画生成MustPhase 4Cloud TTS ナレーション + 動画合成MustPhase 5Veo 3.1 Fast ハイライト動画生成 + フォールバックMustPhase 6フロントエンド UI（ja/en 対応）MustPhase 7Cloud Run / Firestore / Cloud Tasks デプロイMustPhase 8BGM・シェア機能Nice to have
+
+11. リスクと対策
+リスク対策Veo 3.1 Fast の生成失敗・タイムアウトFFmpeg ケンバーンズに自動フォールバック子供の絵のスタイル継承が難しいGemini にスタイル記述を詳細抽出させてImagenプロンプトに注入ページ間でキャラクターの見た目がバラバラキャラクター外見記述をシステムプロンプトに固定して全ページ共通化FFmpeg 動画合成の複雑化連結＋クロスフェードのみにスコープを絞るGCP クレジット超過開発中はケンバーンズのみで進め、Veo 3.1 はデモ直前に限定使用
+
+12. 審査基準への対応
+審査項目配点対応内容Innovation & Multimodal UX40%子供の絵→動く絵本という唯一無二の体験。テキスト・画像・動画・音声のフル活用。日英2言語対応Technical Implementation30%Gemini GenAI SDK + Vertex AI（Imagen）+ Cloud Run + Firestore の堅牢な非同期アーキ。ケンバーンズ / Veo 3.1 のハイブリッドでコスト最適化Demo & Presentation30%子供の絵を実際にアップロードしてリアルタイムで絵本が完成するデモ動画。ハイライトページの Veo 3.1 アニメで審査員の目を引く
