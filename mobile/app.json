@@ -16,12 +16,14 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bonopo.pashabook",
+      "newArchEnabled": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.bonopo.pashabook",
+      "newArchEnabled": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
