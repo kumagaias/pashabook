@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system/legacy";
+import * as FileSystem from "expo-file-system";
 import {
   getLibraryBooks,
   getLibraryBook,
@@ -18,7 +18,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 }));
 
 // Mock FileSystem
-jest.mock("expo-file-system/legacy", () => ({
+jest.mock("expo-file-system", () => ({
   documentDirectory: "file:///mock/documents/",
   getInfoAsync: jest.fn(),
   makeDirectoryAsync: jest.fn(),

@@ -17,7 +17,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { Paths, File } from "expo-file-system";
+import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { Video, ResizeMode } from "expo-av";
 import Animated, {
@@ -197,15 +197,15 @@ export default function DetailScreen() {
     
     try {
       const filename = `${book.title.replace(/[^a-zA-Z0-9]/g, "_")}.mp4`;
-      const file = new File(Paths.document, filename);
+      const fileUri = `${FileSystem.documentDirectory}${filename}`;
       
       // Download the file
-      const downloadedFile = await File.downloadFileAsync(downloadUrl, file);
+      const downloadResult = await FileSystem.downloadAsync(downloadUrl, fileUri);
       
       // Share the downloaded file
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(downloadedFile.uri);
+        await Sharing.shareAsync(downloadResult.uri);
       } else {
         Alert.alert(
           book.language === "ja" ? "ダウンロード完了" : "Download Complete",

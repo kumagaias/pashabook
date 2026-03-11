@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pre-commit hook: Run unit tests and security checks before commit
+
+echo "Running unit tests..."
+make test-unit
+
+if [ $? -ne 0 ]; then
+    echo "❌ Unit tests failed. Commit blocked."
+    exit 1
+fi
+
+echo "✅ Unit tests passed."
+
+echo "Running gitleaks security scan..."
+gitleaks protect --staged --verbose
+
+if [ $? -ne 0 ]; then
+    echo "❌ Gitleaks found secrets. Commit blocked."
+    exit 1
+fi
+
+echo "✅ Security scan passed."
+exit 0
