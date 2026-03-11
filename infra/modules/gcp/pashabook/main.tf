@@ -259,6 +259,11 @@ resource "google_cloud_run_service" "worker" {
           name  = "TASKS_QUEUE"
           value = google_cloud_tasks_queue.processing_queue.name
         }
+
+        env {
+          name  = "VERTEX_AI_LOCATION"
+          value = var.region
+        }
       }
 
       timeout_seconds = var.cloud_run_timeout_seconds
