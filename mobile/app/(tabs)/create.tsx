@@ -43,8 +43,8 @@ const compressImageForWeb = async (file: File): Promise<string> => {
             return;
           }
 
-          // Calculate new dimensions (max 2048px on longest side)
-          const maxSize = 2048;
+          // Calculate new dimensions (max 1600px on longest side for better compression)
+          const maxSize = 1600;
           let width = img.width;
           let height = img.height;
 
@@ -63,9 +63,13 @@ const compressImageForWeb = async (file: File): Promise<string> => {
           // Draw and compress
           ctx.drawImage(img, 0, 0, width, height);
           
-          // Convert to JPEG with 0.8 quality
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+          // Convert to JPEG with 0.7 quality for smaller file size
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
           console.log("Compression complete, data URL length:", compressedDataUrl.length);
+          
+          // Estimate file size (base64 is ~33% larger than binary)
+          const estimatedSize = (compressedDataUrl.length * 0.75) / 1024 / 1024;
+          console.log("Estimated file size:", estimatedSize.toFixed(2), "MB");
           resolve(compressedDataUrl);
         } catch (error) {
           console.error("Error during compression:", error);
@@ -116,11 +120,17 @@ export default function CreateScreen() {
         const target = e.target as HTMLInputElement;
         const file = target.files?.[0];
         if (file) {
+          console.log("File selected:", file.name, file.size, "bytes");
           try {
             // Compress image before displaying
             const compressedDataUrl = await compressImageForWeb(file);
-            console.log("Setting image URI");
+            console.log("Compression complete, setting image URI, length:", compressedDataUrl.length);
+            
+            // Force state update
             setImageUri(compressedDataUrl);
+            
+            console.log("Image URI set successfully");
+            
             // Haptics doesn't work on web, skip it
             try {
               await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
