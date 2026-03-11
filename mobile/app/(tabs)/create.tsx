@@ -31,7 +31,8 @@ const compressImageForWeb = async (file: File): Promise<string> => {
     const reader = new FileReader();
     reader.onload = (e) => {
       console.log("File read complete, creating image");
-      const img = new Image();
+      const img = document.createElement("img") as HTMLImageElement;
+      
       img.onload = () => {
         console.log("Image loaded, dimensions:", img.width, "x", img.height);
         try {
@@ -70,22 +71,36 @@ const compressImageForWeb = async (file: File): Promise<string> => {
           // Estimate file size (base64 is ~33% larger than binary)
           const estimatedSize = (compressedDataUrl.length * 0.75) / 1024 / 1024;
           console.log("Estimated file size:", estimatedSize.toFixed(2), "MB");
+          
+          // Clean up
+          img.remove();
+          
           resolve(compressedDataUrl);
         } catch (error) {
           console.error("Error during compression:", error);
           reject(error);
         }
       };
+      
       img.onerror = (error) => {
         console.error("Failed to load image:", error);
         reject(new Error("Failed to load image"));
       };
-      img.src = e.target?.result as string;
+      
+      // Set src to trigger load
+      const result = e.target?.result;
+      if (typeof result === "string") {
+        img.src = result;
+      } else {
+        reject(new Error("Invalid file data"));
+      }
     };
+    
     reader.onerror = (error) => {
       console.error("Failed to read file:", error);
       reject(new Error("Failed to read file"));
     };
+    
     reader.readAsDataURL(file);
   });
 };
