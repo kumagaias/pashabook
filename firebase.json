@@ -27,7 +27,20 @@
             "value": "public, max-age=31536000, immutable"
           }
         ]
+      },
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "WWW-Authenticate",
+            "value": "Basic realm=\"Pashabook Demo\""
+          }
+        ]
       }
-    ]
+    ],
+    "basicAuth": {
+      "username": "geminiliveagentchallenge",
+      "password": "Pb2024!LiveAgent#Challenge"
+    }
   }
 }
