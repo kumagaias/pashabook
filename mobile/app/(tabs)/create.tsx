@@ -26,46 +26,62 @@ import { uploadImage } from "@/lib/api";
 
 // Helper function to compress images on web platform
 const compressImageForWeb = async (file: File): Promise<string> => {
+  console.log("Starting image compression for file:", file.name, file.size);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
+      console.log("File read complete, creating image");
       const img = new Image();
       img.onload = () => {
-        // Create canvas for compression
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Failed to get canvas context"));
-          return;
+        console.log("Image loaded, dimensions:", img.width, "x", img.height);
+        try {
+          // Create canvas for compression
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Failed to get canvas context"));
+            return;
+          }
+
+          // Calculate new dimensions (max 2048px on longest side)
+          const maxSize = 2048;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          console.log("Canvas dimensions:", width, "x", height);
+
+          // Draw and compress
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert to JPEG with 0.8 quality
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+          console.log("Compression complete, data URL length:", compressedDataUrl.length);
+          resolve(compressedDataUrl);
+        } catch (error) {
+          console.error("Error during compression:", error);
+          reject(error);
         }
-
-        // Calculate new dimensions (max 2048px on longest side)
-        const maxSize = 2048;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height && width > maxSize) {
-          height = (height * maxSize) / width;
-          width = maxSize;
-        } else if (height > maxSize) {
-          width = (width * maxSize) / height;
-          height = maxSize;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        // Draw and compress
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        // Convert to JPEG with 0.8 quality
-        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
-        resolve(compressedDataUrl);
       };
-      img.onerror = () => reject(new Error("Failed to load image"));
+      img.onerror = (error) => {
+        console.error("Failed to load image:", error);
+        reject(new Error("Failed to load image"));
+      };
       img.src = e.target?.result as string;
     };
-    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onerror = (error) => {
+      console.error("Failed to read file:", error);
+      reject(new Error("Failed to read file"));
+    };
     reader.readAsDataURL(file);
   });
 };
