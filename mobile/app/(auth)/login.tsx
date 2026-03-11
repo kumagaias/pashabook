@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import Colors from "@/constants/colors";
@@ -23,10 +23,19 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
   const { language } = useLanguage();
+  const searchParams = useLocalSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showDemoButton, setShowDemoButton] = useState(false);
+
+  useEffect(() => {
+    // Check if demo parameter is present in URL
+    if (searchParams.demo === "true") {
+      setShowDemoButton(true);
+    }
+  }, [searchParams]);
 
   const t = {
     ja: {
@@ -151,20 +160,22 @@ export default function LoginScreen() {
             </Pressable>
           </View>
 
-          <Pressable
-            onPress={() => {
-              setEmail("pashabook@example.com");
-              setPassword("Demo@1234");
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            style={({ pressed }) => [
-              styles.demoLink,
-              pressed && { opacity: 0.6 },
-            ]}
-            testID="demo-login"
-          >
-            <Text style={styles.demoLinkText}>{t.demoAccount}</Text>
-          </Pressable>
+          {showDemoButton && (
+            <Pressable
+              onPress={() => {
+                setEmail("pashabook@example.com");
+                setPassword("Demo@1234");
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={({ pressed }) => [
+                styles.demoLink,
+                pressed && { opacity: 0.6 },
+              ]}
+              testID="demo-login"
+            >
+              <Text style={styles.demoLinkText}>{t.demoAccount}</Text>
+            </Pressable>
+          )}
 
           <Pressable
             onPress={handleLogin}
