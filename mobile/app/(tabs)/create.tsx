@@ -24,6 +24,52 @@ import { useLanguage } from "@/lib/language-context";
 import { useAuth } from "@/lib/auth-context";
 import { uploadImage } from "@/lib/api";
 
+// Helper function to compress images on web platform
+const compressImageForWeb = async (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // Create canvas for compression
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Failed to get canvas context"));
+          return;
+        }
+
+        // Calculate new dimensions (max 2048px on longest side)
+        const maxSize = 2048;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height && width > maxSize) {
+          height = (height * maxSize) / width;
+          width = maxSize;
+        } else if (height > maxSize) {
+          width = (width * maxSize) / height;
+          height = maxSize;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw and compress
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Convert to JPEG with 0.8 quality
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function CreateScreen() {
   const insets = useSafeAreaInsets();
   const { language, setLanguage } = useLanguage();
@@ -54,14 +100,20 @@ export default function CreateScreen() {
         const target = e.target as HTMLInputElement;
         const file = target.files?.[0];
         if (file) {
-          // Convert file to data URL
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const dataUrl = event.target?.result as string;
-            setImageUri(dataUrl);
+          try {
+            // Compress image before displaying
+            const compressedDataUrl = await compressImageForWeb(file);
+            setImageUri(compressedDataUrl);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          };
-          reader.readAsDataURL(file);
+          } catch (error) {
+            console.error("Image compression error:", error);
+            Alert.alert(
+              language === "ja" ? "エラー" : "Error",
+              language === "ja" 
+                ? "画像の処理に失敗しました。別の画像を選択してください。"
+                : "Failed to process image. Please select another image."
+            );
+          }
         }
       };
       
