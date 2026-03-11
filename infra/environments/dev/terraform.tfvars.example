@@ -1,0 +1,13 @@
+project_id                      = "your-project-id"
+region                          = "asia-northeast1"
+firestore_location              = "us-central1"
+artifact_registry_repository_id = "pashabook"
+force_destroy_buckets           = true
+bucket_lifecycle_age_days       = 1
+tasks_max_concurrent_dispatches = 3
+tasks_max_dispatches_per_second = 1
+cloud_run_cpu                   = "2"
+cloud_run_memory                = "4Gi"
+cloud_run_max_instances         = "10"
+cloud_run_min_instances         = "0"
+worker_image                    = ""

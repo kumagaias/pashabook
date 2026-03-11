@@ -13,7 +13,7 @@ Key technical stack:
 
 ## Tasks
 
-- [ ] 1. Project setup and infrastructure foundation
+- [x] 1. Project setup and infrastructure foundation
   - Initialize React Native (Expo) project with TypeScript
   - Set up Google Cloud Project with required APIs enabled
   - Configure Firebase Authentication (Email/Password)
@@ -24,8 +24,8 @@ Key technical stack:
   - Set up Makefile with test, install, and clean commands
   - _Requirements: All requirements depend on this foundation_
 
-- [ ] 2. Authentication system
-  - [ ] 2.1 Implement Firebase Authentication integration
+- [x] 2. Authentication system
+  - [x] 2.1 Implement Firebase Authentication integration
     - Create user registration function with email/password validation
     - Create user login function with session management
     - Create logout function with AsyncStorage cleanup
@@ -40,8 +40,8 @@ Key technical stack:
     - Test session persistence in AsyncStorage
     - _Requirements: 1.2, 1.3, 1.9_
 
-- [ ] 3. Backend API endpoints (Cloud Functions)
-  - [ ] 3.1 Implement POST /api/upload endpoint
+- [x] 3. Backend API endpoints (Cloud Functions)
+  - [x] 3.1 Implement POST /api/upload endpoint
     - Accept multipart/form-data with image and language
     - Verify Firebase ID token in Authorization header
     - Validate file format (JPEG/PNG only)
@@ -64,7 +64,7 @@ Key technical stack:
     - Test error messages for each validation failure
     - _Requirements: 2.3, 2.4_
 
-  - [ ] 3.4 Implement GET /api/status/:jobId endpoint
+  - [x] 3.4 Implement GET /api/status/:jobId endpoint
     - Verify Firebase ID token
     - Check job userId matches authenticated user
     - Query Job record from Firestore
@@ -75,7 +75,7 @@ Key technical stack:
     - **Property 43: Job Query Round-Trip**
     - **Validates: Requirements 10.6**
 
-  - [ ] 3.6 Implement GET /api/video/:jobId endpoint
+  - [x] 3.6 Implement GET /api/video/:jobId endpoint
     - Verify Firebase ID token
     - Check job userId matches authenticated user
     - Verify job status is "done"
@@ -94,11 +94,11 @@ Key technical stack:
     - Test 404 error for incomplete job
     - _Requirements: 11.1, 11.2_
 
-- [ ] 4. Checkpoint - Ensure all tests pass
+- [x] 4. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Image analysis service (Cloud Run Worker)
-  - [ ] 5.1 Implement ImageAnalyzer with Gemini 2.0 Flash
+- [x] 5. Image analysis service (Cloud Run Worker)
+  - [x] 5.1 Implement ImageAnalyzer with Gemini 2.0 Flash
     - Create analyze() function accepting imageUrl and language
     - Extract character names and descriptions
     - Extract setting and background information
@@ -119,8 +119,8 @@ Key technical stack:
     - Test error response handling
     - _Requirements: 3.6_
 
-- [ ] 6. Story generation service (Cloud Run Worker)
-  - [ ] 6.1 Implement StoryGenerator with Gemini 2.0 Flash
+- [x] 6. Story generation service (Cloud Run Worker)
+  - [x] 6.1 Implement StoryGenerator with Gemini 2.0 Flash
     - Create generate() function accepting analysis and language
     - Generate story with 5-6 pages
     - Use age-appropriate vocabulary (3-8 years)
@@ -154,8 +154,8 @@ Key technical stack:
     - Test language-specific content generation
     - _Requirements: 4.12_
 
-- [ ] 7. Narration generation service (Cloud Run Worker)
-  - [ ] 7.1 Implement NarrationGenerator with Cloud TTS
+- [x] 7. Narration generation service (Cloud Run Worker)
+  - [x] 7.1 Implement NarrationGenerator with Cloud TTS
     - Create generatePerPage() function for individual pages
     - Create generateAll() function for parallel processing
     - Use Japanese voice for Japanese stories
@@ -180,8 +180,8 @@ Key technical stack:
     - Test Cloud Storage upload
     - _Requirements: 8.2, 8.3_
 
-- [ ] 8. Illustration generation service (Cloud Run Worker)
-  - [ ] 8.1 Implement IllustrationGenerator with Imagen 3
+- [x] 8. Illustration generation service (Cloud Run Worker)
+  - [x] 8.1 Implement IllustrationGenerator with Imagen 3
     - Create generateAll() function for parallel generation
     - Incorporate style description into prompts
     - Incorporate character descriptions into prompts
@@ -206,11 +206,11 @@ Key technical stack:
     - Test retry logic
     - _Requirements: 5.4, 5.8_
 
-- [ ] 9. Checkpoint - Ensure all tests pass
+- [x] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. Animation engine - Standard pages (Cloud Run Worker)
-  - [ ] 10.1 Implement standard page animation with FFmpeg Ken Burns effect
+- [x] 10. Animation engine - Standard pages (Cloud Run Worker)
+  - [x] 10.1 Implement standard page animation with FFmpeg Ken Burns effect
     - Create animateStandardPage() function
     - Accept illustration and narration duration
     - Randomly select zoom direction (in/out)
@@ -237,8 +237,8 @@ Key technical stack:
     - Test duration synchronization with audio
     - _Requirements: 6.2, 6.5_
 
-- [ ] 11. Animation engine - Highlight pages (Cloud Run Worker)
-  - [ ] 11.1 Implement highlight page animation with Veo 3.1 Fast
+- [x] 11. Animation engine - Highlight pages (Cloud Run Worker)
+  - [x] 11.1 Implement highlight page animation with Veo 3.1 Fast
     - Create animateHighlightPage() function
     - Accept illustration, prompt, and narration duration
     - Generate video clip with Veo 3.1 Fast
@@ -262,8 +262,8 @@ Key technical stack:
     - Test duration synchronization
     - _Requirements: 7.4, 7.5_
 
-- [ ] 12. Video composition service (Cloud Run Worker)
-  - [ ] 12.1 Implement VideoCompositor with FFmpeg
+- [x] 12. Video composition service (Cloud Run Worker)
+  - [x] 12.1 Implement VideoCompositor with FFmpeg
     - Create compose() function accepting clips and narrations
     - Combine all page clips in sequence
     - Apply 0.5 second crossfade transitions between pages
@@ -290,8 +290,8 @@ Key technical stack:
     - Test FFmpeg command generation
     - _Requirements: 9.2, 9.3_
 
-- [ ] 13. Processing pipeline orchestration (Cloud Run Worker)
-  - [ ] 13.1 Implement main processing worker
+- [x] 13. Processing pipeline orchestration (Cloud Run Worker)
+  - [x] 13.1 Implement main processing worker
     - Create Cloud Run service handling Cloud Tasks queue
     - Orchestrate pipeline: Analysis → Story → Parallel(Narration + Illustration) → Animation → Composition
     - Update Job status at each stage (pending → processing → done/error)
@@ -317,11 +317,11 @@ Key technical stack:
     - Test progress percentage updates
     - _Requirements: 10.1, 10.2, 10.3_
 
-- [ ] 14. Checkpoint - Ensure all tests pass
+- [x] 14. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 15. Frontend - Core app structure
-  - [ ] 15.1 Create main App component with routing
+- [x] 15. Frontend - Core app structure
+  - [x] 15.1 Create main App component with routing
     - Implement stage management (upload/processing/preview/library)
     - Implement language selection (ja/en)
     - Create navigation between stages
@@ -334,8 +334,8 @@ Key technical stack:
     - Test AsyncStorage persistence
     - _Requirements: 12.3_
 
-- [ ] 16. Frontend - Upload section
-  - [ ] 16.1 Implement UploadSection component
+- [x] 16. Frontend - Upload section
+  - [x] 16.1 Implement UploadSection component
     - Create image picker integration (Expo ImagePicker)
     - Implement upload button with loading state
     - Display language selection UI
@@ -354,8 +354,8 @@ Key technical stack:
     - Test error message display
     - _Requirements: 17.1_
 
-- [ ] 17. Frontend - Processing section
-  - [ ] 17.1 Implement ProcessingSection component
+- [x] 17. Frontend - Processing section
+  - [x] 17.1 Implement ProcessingSection component
     - Poll GET /api/status/:jobId every 2 seconds
     - Display current stage (analyzing/generating/illustrating/animating/narrating/composing)
     - Display progress percentage (0-100)
@@ -371,8 +371,8 @@ Key technical stack:
     - Test retry button functionality
     - _Requirements: 17.2, 17.3_
 
-- [ ] 18. Frontend - Preview section
-  - [ ] 18.1 Implement PreviewSection component
+- [x] 18. Frontend - Preview section
+  - [x] 18.1 Implement PreviewSection component
     - Call GET /api/video/:jobId to get signed URL
     - Display video player with playback controls
     - Display story title (editable)
@@ -397,8 +397,8 @@ Key technical stack:
     - Test download functionality
     - _Requirements: 11.3_
 
-- [ ] 19. Frontend - Library management
-  - [ ] 19.1 Implement local library storage with AsyncStorage and FileSystem
+- [x] 19. Frontend - Library management
+  - [x] 19.1 Implement local library storage with AsyncStorage and FileSystem
     - Create library data structure in AsyncStorage
     - Download video file to device FileSystem when saving
     - Generate and store thumbnail from video
@@ -419,8 +419,8 @@ Key technical stack:
     - Test thumbnail generation
     - _Requirements: 13.2, 13.6_
 
-- [ ] 20. Frontend - Library section
-  - [ ] 20.1 Implement LibrarySection component
+- [x] 20. Frontend - Library section
+  - [x] 20.1 Implement LibrarySection component
     - Display all saved storybooks in grid layout
     - Show thumbnail, title, and creation date per book
     - Implement view button to play saved video
@@ -443,11 +443,11 @@ Key technical stack:
     - Test empty state display
     - _Requirements: 13.3, 13.4_
 
-- [ ] 21. Checkpoint - Ensure all tests pass
+- [x] 21. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 22. Internationalization (i18n)
-  - [ ] 22.1 Implement language support
+- [x] 22. Internationalization (i18n)
+  - [x] 22.1 Implement language support
     - Create translation files for Japanese and English
     - Implement language switching in UI
     - Update all UI text to use translations
@@ -465,8 +465,8 @@ Key technical stack:
     - Test persistence
     - _Requirements: 12.3_
 
-- [ ] 23. Error handling and logging
-  - [ ] 23.1 Implement comprehensive error handling
+- [x] 23. Error handling and logging
+  - [x] 23.1 Implement comprehensive error handling
     - Add error boundaries in React Native app
     - Implement Cloud Logging integration in backend
     - Sanitize error messages for users
@@ -488,8 +488,8 @@ Key technical stack:
     - Test retry logic
     - _Requirements: 17.5_
 
-- [ ] 24. Data retention and cleanup
-  - [ ] 24.1 Implement automated cleanup
+- [x] 24. Data retention and cleanup
+  - [x] 24.1 Implement automated cleanup
     - Configure Cloud Storage lifecycle policies (24-hour TTL)
     - Create Firestore TTL field for Job records
     - Set up Cloud Scheduler for periodic cleanup
@@ -500,8 +500,8 @@ Key technical stack:
     - Test TTL field calculation
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
 
-- [ ] 25. Performance optimization
-  - [ ] 25.1 Optimize generation pipeline
+- [x] 25. Performance optimization
+  - [x] 25.1 Optimize generation pipeline
     - Implement parallel execution for narration and illustration
     - Configure Cloud Tasks queue with max 3 concurrent jobs
     - Optimize FFmpeg commands for speed
@@ -513,8 +513,8 @@ Key technical stack:
     - Test queue concurrency limits
     - _Requirements: 16.4_
 
-- [ ] 26. Integration and final wiring
-  - [ ] 26.1 Wire all components together
+- [x] 26. Integration and final wiring
+  - [x] 26.1 Wire all components together
     - Connect frontend to backend APIs
     - Configure Firebase Authentication in mobile app
     - Set up Cloud Tasks queue integration
@@ -529,7 +529,7 @@ Key technical stack:
     - Test concurrent job processing
     - _Requirements: All requirements_
 
-- [ ] 27. Final checkpoint - Ensure all tests pass
+- [x] 27. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

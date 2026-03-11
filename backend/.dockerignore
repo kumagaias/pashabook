@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+npm-debug.log
+
+# Build outputs
+dist
+*.tsbuildinfo
+
+# Tests
+*.test.ts
+*.spec.ts
+__tests__
+coverage
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+docs
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Misc
+*.log
+*.md
+!package.json

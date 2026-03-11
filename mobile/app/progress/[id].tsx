@@ -24,25 +24,63 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import StepIndicator from "@/components/StepIndicator";
 import ProgressBar from "@/components/ProgressBar";
-import { Storybook, getStorybook } from "@/lib/storage";
-import { simulateGeneration } from "@/lib/mock-generation";
+import { Storybook, getStorybook, saveStorybook } from "@/lib/storage";
+import { getJobStatus, JobStatus } from "@/lib/api";
+import { getAuth } from "firebase/auth";
 
-const STEP_MESSAGES: Record<string, { ja: string; en: string }> = {
-  uploading: { ja: "画像をアップロード中...", en: "Uploading image..." },
-  analyzing: { ja: "絵を分析中...", en: "Analyzing drawing..." },
-  generating_story: { ja: "ストーリーを作成中...", en: "Creating story..." },
-  generating_illustrations: { ja: "イラストを生成中...", en: "Generating illustrations..." },
-  generating_narration: { ja: "ナレーションを作成中...", en: "Creating narration..." },
-  generating_animation: { ja: "アニメーションを作成中...", en: "Animating pages..." },
-  compositing: { ja: "動画を合成中...", en: "Compositing video..." },
-  done: { ja: "完成しました!", en: "Complete!" },
+const STEP_INFO: Record<string, { ja: { title: string; desc: string }; en: { title: string; desc: string }; icon: string }> = {
+  uploading: { 
+    ja: { title: "アップロード中", desc: "画像を送信しています" },
+    en: { title: "Uploading", desc: "Sending your image" },
+    icon: "cloud-upload-outline"
+  },
+  analyzing: { 
+    ja: { title: "分析中", desc: "絵を理解しています" },
+    en: { title: "Analyzing", desc: "Understanding your drawing" },
+    icon: "eye-outline"
+  },
+  generating: { 
+    ja: { title: "ストーリー作成", desc: "物語を考えています" },
+    en: { title: "Creating Story", desc: "Writing your tale" },
+    icon: "book-outline"
+  },
+  illustrating: { 
+    ja: { title: "イラスト生成", desc: "絵を描いています" },
+    en: { title: "Illustrating", desc: "Drawing pictures" },
+    icon: "color-palette-outline"
+  },
+  narrating: { 
+    ja: { title: "ナレーション作成", desc: "声を録音しています" },
+    en: { title: "Narrating", desc: "Recording voice" },
+    icon: "mic-outline"
+  },
+  animating: { 
+    ja: { title: "アニメーション", desc: "動きをつけています" },
+    en: { title: "Animating", desc: "Adding motion" },
+    icon: "film-outline"
+  },
+  composing: { 
+    ja: { title: "動画合成", desc: "仕上げをしています" },
+    en: { title: "Compositing", desc: "Finishing touches" },
+    icon: "videocam-outline"
+  },
+  done: { 
+    ja: { title: "完成!", desc: "絵本ができました" },
+    en: { title: "Complete!", desc: "Your storybook is ready" },
+    icon: "checkmark-circle"
+  },
 };
+
+const POLLING_INTERVAL = 2000; // 2 seconds
 
 export default function ProgressScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const [book, setBook] = useState<Storybook | null>(null);
-  const hasStarted = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
 
   const sparkle = useSharedValue(0);
 
@@ -62,26 +100,185 @@ export default function ProgressScreen() {
     transform: [{ rotate: `${sparkle.value * 360}deg` }],
   }));
 
-  const loadAndStart = useCallback(async () => {
-    if (!id || hasStarted.current) return;
+  /**
+   * Map backend stage to frontend step for display
+   */
+  const mapStageToStep = (stage: string): string => {
+    const stageMap: Record<string, string> = {
+      analyzing: "analyzing",
+      generating: "generating",
+      illustrating: "illustrating",
+      narrating: "narrating",
+      animating: "animating",
+      composing: "composing",
+    };
+    return stageMap[stage] || stage;
+  };
+
+  /**
+   * Update local storybook with job status data
+   */
+  const updateBookFromJobStatus = useCallback(
+    async (jobStatus: JobStatus, currentBook: Storybook) => {
+      const updatedBook: Storybook = {
+        ...currentBook,
+        status: jobStatus.status,
+        updatedAt: Date.now(),
+      };
+
+      // Update progress information
+      if (jobStatus.progress) {
+        updatedBook.currentStep = mapStageToStep(jobStatus.progress.stage);
+        updatedBook.progress = jobStatus.progress.percentage;
+      }
+
+      // Update result data when done
+      if (jobStatus.status === "done" && jobStatus.result) {
+        updatedBook.title = jobStatus.result.title;
+        updatedBook.videoUrl = jobStatus.result.videoUrl;
+        
+        // Map story text to pages
+        if (jobStatus.result.storyText && jobStatus.result.storyText.length > 0) {
+          updatedBook.pages = jobStatus.result.storyText.map((text, idx) => ({
+            id: `${jobStatus.jobId}-page-${idx}`,
+            pageNumber: idx + 1,
+            narrationText: text,
+            imagePrompt: "",
+            animationMode: "standard" as const,
+          }));
+        }
+      }
+
+      // Update error message
+      if (jobStatus.status === "error" && jobStatus.error) {
+        updatedBook.errorMessage = jobStatus.error;
+      }
+
+      await saveStorybook(updatedBook);
+      if (isMountedRef.current) {
+        setBook(updatedBook);
+      }
+
+      return updatedBook;
+    },
+    []
+  );
+
+  /**
+   * Poll job status from backend API
+   */
+  const pollJobStatus = useCallback(async () => {
+    if (!id || !book) return;
+
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      if (!user) {
+        setError("Authentication required. Please sign in again.");
+        return;
+      }
+
+      const idToken = await user.getIdToken();
+      const jobStatus = await getJobStatus(id, idToken);
+
+      const updatedBook = await updateBookFromJobStatus(jobStatus, book);
+
+      // Stop polling if job is complete or errored
+      if (jobStatus.status === "done" || jobStatus.status === "error") {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+
+        // Trigger haptic feedback on completion
+        if (jobStatus.status === "done") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+
+      // Clear any previous errors
+      if (error) {
+        setError(null);
+      }
+    } catch (err) {
+      console.error("Polling error:", err);
+      
+      // Only show error if it's not a transient network issue
+      if (err instanceof Error) {
+        if (err.message.includes("Network error")) {
+          setError(err.message);
+        } else {
+          setError("Failed to check status. Please try again.");
+        }
+      }
+    }
+  }, [id, book, error, updateBookFromJobStatus]);
+
+  /**
+   * Start polling for job status
+   */
+  const startPolling = useCallback(() => {
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    // Poll immediately
+    pollJobStatus();
+
+    // Set up interval for subsequent polls
+    pollingIntervalRef.current = setInterval(pollJobStatus, POLLING_INTERVAL);
+  }, [pollJobStatus]);
+
+  /**
+   * Retry after error
+   */
+  const handleRetry = useCallback(async () => {
+    setIsRetrying(true);
+    setError(null);
+    
+    try {
+      await pollJobStatus();
+      startPolling();
+    } catch (err) {
+      console.error("Retry error:", err);
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [pollJobStatus, startPolling]);
+
+  /**
+   * Load storybook and start polling
+   */
+  const loadAndStartPolling = useCallback(async () => {
+    if (!id) return;
+
     const data = await getStorybook(id);
-    if (!data) return;
+    if (!data) {
+      setError("Storybook not found");
+      return;
+    }
+
     setBook(data);
 
-    if (data.status === "done") return;
+    // Only start polling if job is not complete
+    if (data.status !== "done" && data.status !== "error") {
+      startPolling();
+    }
+  }, [id, startPolling]);
 
-    hasStarted.current = true;
-    simulateGeneration(data, (updated) => {
-      setBook({ ...updated });
-      if (updated.status === "done") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    });
-  }, [id]);
-
+  // Initial load
   useEffect(() => {
-    loadAndStart();
-  }, [loadAndStart]);
+    loadAndStartPolling();
+
+    return () => {
+      isMountedRef.current = false;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [loadAndStartPolling]);
 
   if (!book) {
     return (
@@ -90,17 +287,19 @@ export default function ProgressScreen() {
           colors={[Colors.background, Colors.backgroundAlt]}
           style={StyleSheet.absoluteFill}
         />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.loadingText}>
+          {error || "Loading..."}
+        </Text>
       </View>
     );
   }
 
   const lang = book.language;
-  const stepMessage =
-    STEP_MESSAGES[book.currentStep]?.[lang] ||
-    STEP_MESSAGES[book.currentStep]?.en ||
-    "Processing...";
+  const stepInfo = STEP_INFO[book.currentStep] || STEP_INFO.uploading;
+  const stepTitle = stepInfo[lang]?.title || stepInfo.en.title;
+  const stepDesc = stepInfo[lang]?.desc || stepInfo.en.desc;
   const isDone = book.status === "done";
+  const hasError = book.status === "error" || error !== null;
 
   return (
     <View style={styles.screen}>
@@ -152,14 +351,21 @@ export default function ProgressScreen() {
         </View>
 
         <View style={styles.progressSection}>
-          <StepIndicator currentStep={book.currentStep} />
+          <View style={styles.currentStepCard}>
+            <View style={styles.stepIconWrapper}>
+              <Ionicons 
+                name={stepInfo.icon as any} 
+                size={48} 
+                color={isDone ? Colors.success : Colors.primary} 
+              />
+            </View>
+            <Text style={styles.stepTitle}>{stepTitle}</Text>
+            <Text style={styles.stepDescription}>{stepDesc}</Text>
+          </View>
 
           <View style={styles.progressInfo}>
-            <ProgressBar progress={book.progress} height={8} />
-            <View style={styles.progressRow}>
-              <Text style={styles.stepText}>{stepMessage}</Text>
-              <Text style={styles.percentText}>{book.progress}%</Text>
-            </View>
+            <ProgressBar progress={book.progress} height={10} />
+            <Text style={styles.percentText}>{book.progress}%</Text>
           </View>
         </View>
 
@@ -189,6 +395,47 @@ export default function ProgressScreen() {
                 </Text>
               </LinearGradient>
             </Pressable>
+          </Animated.View>
+        )}
+
+        {hasError && (
+          <Animated.View entering={FadeIn.duration(600)} style={styles.errorSection}>
+            <View style={styles.errorCard}>
+              <Ionicons name="alert-circle" size={32} color={Colors.error} />
+              <Text style={styles.errorTitle}>
+                {lang === "ja" ? "エラーが発生しました" : "An Error Occurred"}
+              </Text>
+              <Text style={styles.errorMessage}>
+                {error || book.errorMessage || (lang === "ja" ? "処理中にエラーが発生しました" : "An error occurred during processing")}
+              </Text>
+              <Pressable
+                onPress={handleRetry}
+                disabled={isRetrying}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && { opacity: 0.9 },
+                  isRetrying && { opacity: 0.6 },
+                ]}
+              >
+                <LinearGradient
+                  colors={[Colors.primary, Colors.primaryDark]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.retryButtonGradient}
+                >
+                  <Ionicons 
+                    name={isRetrying ? "hourglass" : "refresh"} 
+                    size={20} 
+                    color="#fff" 
+                  />
+                  <Text style={styles.retryButtonText}>
+                    {isRetrying 
+                      ? (lang === "ja" ? "再試行中..." : "Retrying...") 
+                      : (lang === "ja" ? "再試行" : "Retry")}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
           </Animated.View>
         )}
       </View>
@@ -270,40 +517,56 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   progressSection: {
-    marginTop: 24,
+    marginTop: 32,
+    gap: 20,
+  },
+  currentStepCard: {
     backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: "center",
+    gap: 16,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 16,
       },
-      android: { elevation: 2 },
+      android: { elevation: 4 },
       default: {},
     }),
   },
-  progressInfo: {
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingBottom: 4,
-  },
-  progressRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  stepIconWrapper: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: Colors.background,
     alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
   },
-  stepText: {
-    fontSize: 14,
+  stepTitle: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  stepDescription: {
+    fontSize: 16,
     fontFamily: "Inter_500Medium",
     color: Colors.textSecondary,
+    textAlign: "center",
+  },
+  progressInfo: {
+    gap: 12,
+    paddingHorizontal: 4,
   },
   percentText: {
-    fontSize: 14,
+    fontSize: 18,
     fontFamily: "Inter_700Bold",
     color: Colors.primary,
+    textAlign: "center",
   },
   doneSection: {
     marginTop: 32,
@@ -323,6 +586,58 @@ const styles = StyleSheet.create({
   viewButtonText: {
     fontSize: 17,
     fontFamily: "Inter_700Bold",
+    color: "#fff",
+  },
+  errorSection: {
+    marginTop: 32,
+  },
+  errorCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.error,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: { elevation: 4 },
+      default: {},
+    }),
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  errorMessage: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  retryButton: {
+    marginTop: 8,
+    borderRadius: 12,
+    overflow: "hidden",
+    width: "100%",
+  },
+  retryButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
     color: "#fff",
   },
 });

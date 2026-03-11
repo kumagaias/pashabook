@@ -7,6 +7,9 @@ import {
   ScrollView,
   Dimensions,
   Platform,
+  TextInput,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
@@ -14,6 +17,9 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { Paths, File } from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { Video, ResizeMode } from "expo-av";
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -22,7 +28,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Colors from "@/constants/colors";
-import { Storybook, getStorybook } from "@/lib/storage";
+import { Storybook, getStorybook, saveStorybook } from "@/lib/storage";
+import { getVideoUrls } from "@/lib/api";
+import { getAuth } from "firebase/auth";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const PAGE_WIDTH = SCREEN_WIDTH - 40;
@@ -83,12 +91,146 @@ export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const [book, setBook] = useState<Storybook | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const videoRef = useRef<Video>(null);
 
   useEffect(() => {
     if (id) {
-      getStorybook(id).then(setBook);
+      loadStorybook();
     }
   }, [id]);
+
+  const loadStorybook = async () => {
+    if (!id) return;
+    
+    const data = await getStorybook(id);
+    if (!data) {
+      setVideoError("Storybook not found");
+      return;
+    }
+    
+    setBook(data);
+    setEditedTitle(data.title);
+    
+    // Fetch video URLs if not already loaded
+    if (data.status === "done" && !videoUrl) {
+      await fetchVideoUrls();
+    }
+  };
+
+  const fetchVideoUrls = async () => {
+    if (!id) return;
+    
+    setIsLoadingVideo(true);
+    setVideoError(null);
+    
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      if (!user) {
+        setVideoError("Authentication required");
+        return;
+      }
+      
+      const idToken = await user.getIdToken();
+      const urls = await getVideoUrls(id, idToken);
+      
+      setVideoUrl(urls.videoUrl);
+      setDownloadUrl(urls.downloadUrl);
+    } catch (error) {
+      console.error("Failed to fetch video URLs:", error);
+      setVideoError(error instanceof Error ? error.message : "Failed to load video");
+    } finally {
+      setIsLoadingVideo(false);
+    }
+  };
+
+  const handleTitleEdit = () => {
+    setIsEditingTitle(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleTitleSave = async () => {
+    if (!book || !editedTitle.trim()) return;
+    
+    setIsSaving(true);
+    
+    try {
+      const updatedBook = {
+        ...book,
+        title: editedTitle.trim(),
+        updatedAt: Date.now(),
+      };
+      
+      await saveStorybook(updatedBook);
+      setBook(updatedBook);
+      setIsEditingTitle(false);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error("Failed to save title:", error);
+      Alert.alert(
+        book.language === "ja" ? "エラー" : "Error",
+        book.language === "ja" ? "タイトルの保存に失敗しました" : "Failed to save title"
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleTitleCancel = () => {
+    setEditedTitle(book?.title || "");
+    setIsEditingTitle(false);
+  };
+
+  const handleDownload = async () => {
+    if (!downloadUrl || !book) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    try {
+      const filename = `${book.title.replace(/[^a-zA-Z0-9]/g, "_")}.mp4`;
+      const file = new File(Paths.document, filename);
+      
+      // Download the file
+      const downloadedFile = await File.downloadFileAsync(downloadUrl, file);
+      
+      // Share the downloaded file
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(downloadedFile.uri);
+      } else {
+        Alert.alert(
+          book.language === "ja" ? "ダウンロード完了" : "Download Complete",
+          book.language === "ja" 
+            ? `動画を保存しました: ${filename}` 
+            : `Video saved: ${filename}`
+        );
+      }
+    } catch (error) {
+      console.error("Download error:", error);
+      Alert.alert(
+        book.language === "ja" ? "エラー" : "Error",
+        book.language === "ja" 
+          ? "ダウンロードに失敗しました" 
+          : "Failed to download video"
+      );
+    }
+  };
+
+  const handlePlayVideo = async () => {
+    if (videoRef.current) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await videoRef.current.playAsync();
+    }
+  };
 
   if (!book) {
     return (
@@ -151,7 +293,52 @@ export default function DetailScreen() {
             />
           </View>
           <View style={styles.heroInfo}>
-            <Text style={styles.heroTitle}>{book.title}</Text>
+            {isEditingTitle ? (
+              <View style={styles.titleEditContainer}>
+                <TextInput
+                  style={styles.titleInput}
+                  value={editedTitle}
+                  onChangeText={setEditedTitle}
+                  autoFocus
+                  multiline
+                  maxLength={100}
+                  placeholder={book.language === "ja" ? "タイトルを入力" : "Enter title"}
+                  placeholderTextColor={Colors.textTertiary}
+                />
+                <View style={styles.titleEditButtons}>
+                  <Pressable
+                    onPress={handleTitleCancel}
+                    style={({ pressed }) => [
+                      styles.titleEditButton,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Ionicons name="close" size={18} color={Colors.textSecondary} />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleTitleSave}
+                    disabled={isSaving || !editedTitle.trim()}
+                    style={({ pressed }) => [
+                      styles.titleEditButton,
+                      styles.titleSaveButton,
+                      pressed && { opacity: 0.7 },
+                      (!editedTitle.trim() || isSaving) && { opacity: 0.5 },
+                    ]}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons name="checkmark" size={18} color="#fff" />
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable onPress={handleTitleEdit} style={styles.titleContainer}>
+                <Text style={styles.heroTitle}>{book.title}</Text>
+                <Ionicons name="pencil" size={16} color={Colors.textSecondary} />
+              </Pressable>
+            )}
             <View style={styles.heroMeta}>
               <View style={styles.metaItem}>
                 <Ionicons name="book-outline" size={14} color={Colors.textSecondary} />
@@ -170,49 +357,87 @@ export default function DetailScreen() {
         </Animated.View>
 
         <View style={styles.videoSection}>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }}
-            style={({ pressed }) => [
-              styles.videoButton,
-              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-            ]}
-          >
-            <LinearGradient
-              colors={[Colors.primary, Colors.primaryDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.videoButtonGradient}
-            >
-              <Ionicons name="play-circle" size={28} color="#fff" />
-              <View>
-                <Text style={styles.videoButtonTitle}>
-                  {book.language === "ja" ? "動画を再生" : "Play Video"}
+          {isLoadingVideo ? (
+            <View style={styles.videoLoading}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={styles.videoLoadingText}>
+                {book.language === "ja" ? "動画を読み込み中..." : "Loading video..."}
+              </Text>
+            </View>
+          ) : videoError ? (
+            <View style={styles.videoError}>
+              <Ionicons name="alert-circle-outline" size={32} color={Colors.error} />
+              <Text style={styles.videoErrorText}>{videoError}</Text>
+              <Pressable
+                onPress={fetchVideoUrls}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && { opacity: 0.8 },
+                ]}
+              >
+                <Text style={styles.retryButtonText}>
+                  {book.language === "ja" ? "再試行" : "Retry"}
                 </Text>
-                <Text style={styles.videoButtonSub}>
-                  {book.language === "ja"
-                    ? "アニメーション付き絵本"
-                    : "Animated storybook"}
-                </Text>
+              </Pressable>
+            </View>
+          ) : videoUrl ? (
+            <>
+              <View style={styles.videoPlayer}>
+                <Video
+                  ref={videoRef}
+                  source={{ uri: videoUrl }}
+                  style={styles.video}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping={false}
+                  onError={(error) => {
+                    console.error("Video playback error:", error);
+                    setVideoError(book.language === "ja" ? "動画の再生に失敗しました" : "Failed to play video");
+                  }}
+                />
               </View>
-            </LinearGradient>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            style={({ pressed }) => [
-              styles.downloadButton,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Ionicons name="download-outline" size={20} color={Colors.primary} />
-            <Text style={styles.downloadText}>
-              {book.language === "ja" ? "ダウンロード" : "Download"}
-            </Text>
-          </Pressable>
+              
+              <Pressable
+                onPress={handleDownload}
+                style={({ pressed }) => [
+                  styles.downloadButton,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Ionicons name="download-outline" size={20} color={Colors.primary} />
+                <Text style={styles.downloadText}>
+                  {book.language === "ja" ? "ダウンロード" : "Download"}
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              onPress={handlePlayVideo}
+              style={({ pressed }) => [
+                styles.videoButton,
+                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+              ]}
+            >
+              <LinearGradient
+                colors={[Colors.primary, Colors.primaryDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.videoButtonGradient}
+              >
+                <Ionicons name="play-circle" size={28} color="#fff" />
+                <View>
+                  <Text style={styles.videoButtonTitle}>
+                    {book.language === "ja" ? "動画を再生" : "Play Video"}
+                  </Text>
+                  <Text style={styles.videoButtonSub}>
+                    {book.language === "ja"
+                      ? "アニメーション付き絵本"
+                      : "Animated storybook"}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.pagesSection}>
@@ -309,11 +534,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   heroTitle: {
     fontSize: 24,
     fontFamily: "Inter_700Bold",
     color: Colors.text,
     lineHeight: 30,
+    flex: 1,
+  },
+  titleEditContainer: {
+    gap: 8,
+  },
+  titleInput: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+    color: Colors.text,
+    lineHeight: 30,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.background,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  titleEditButtons: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+  },
+  titleEditButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleSaveButton: {
+    backgroundColor: Colors.primary,
   },
   heroMeta: {
     gap: 6,
@@ -331,6 +592,53 @@ const styles = StyleSheet.create({
   videoSection: {
     gap: 10,
     marginBottom: 28,
+  },
+  videoLoading: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 12,
+  },
+  videoLoadingText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+  },
+  videoError: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 20,
+  },
+  videoErrorText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.error,
+    textAlign: "center",
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
+  },
+  videoPlayer: {
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#000",
+    aspectRatio: 16 / 9,
+  },
+  video: {
+    width: "100%",
+    height: "100%",
   },
   videoButton: {
     borderRadius: 16,

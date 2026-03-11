@@ -17,29 +17,59 @@ import * as Haptics from "expo-haptics";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const { language } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const t = {
+    ja: {
+      brandSubtitle: "魔法の絵本を作成するためにサインイン",
+      emailPlaceholder: "メールアドレス",
+      passwordPlaceholder: "パスワード",
+      demoAccount: "デモアカウントを使用",
+      signingIn: "サインイン中...",
+      signIn: "サインイン",
+      noAccount: "アカウントをお持ちでないですか？",
+      signUp: "新規登録",
+      errorTitle: "エラー",
+      fillAllFields: "すべてのフィールドを入力してください。",
+      loginFailed: "ログインに失敗しました。もう一度お試しください。",
+    },
+    en: {
+      brandSubtitle: "Sign in to create magical storybooks",
+      emailPlaceholder: "Email",
+      passwordPlaceholder: "Password",
+      demoAccount: "Use demo account",
+      signingIn: "Signing in...",
+      signIn: "Sign In",
+      noAccount: "Don't have an account?",
+      signUp: "Sign Up",
+      errorTitle: "Error",
+      fillAllFields: "Please fill in all fields.",
+      loginFailed: "Login failed. Please try again.",
+    },
+  }[language];
+
   const handleLogin = async () => {
     Keyboard.dismiss();
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Error", "Please fill in all fields.");
+      Alert.alert(t.errorTitle, t.fillAllFields);
       return;
     }
     setIsLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await login(email.trim(), password);
-      router.dismissAll();
+      // Navigation will be handled by root layout auth guard
     } catch (error) {
-      Alert.alert("Error", "Login failed. Please try again.");
-    } finally {
+      Alert.alert(t.errorTitle, t.loginFailed);
       setIsLoading(false);
     }
   };
@@ -67,7 +97,7 @@ export default function LoginScreen() {
           </View>
           <Text style={styles.brandTitle}>Pashabook</Text>
           <Text style={styles.brandSubtitle}>
-            Sign in to create magical storybooks
+            {t.brandSubtitle}
           </Text>
         </View>
 
@@ -81,7 +111,7 @@ export default function LoginScreen() {
             />
             <TextInput
               style={styles.input}
-              placeholder="Email"
+              placeholder={t.emailPlaceholder}
               placeholderTextColor={Colors.textTertiary}
               value={email}
               onChangeText={setEmail}
@@ -101,7 +131,7 @@ export default function LoginScreen() {
             />
             <TextInput
               style={styles.input}
-              placeholder="Password"
+              placeholder={t.passwordPlaceholder}
               placeholderTextColor={Colors.textTertiary}
               value={password}
               onChangeText={setPassword}
@@ -133,7 +163,7 @@ export default function LoginScreen() {
             ]}
             testID="demo-login"
           >
-            <Text style={styles.demoLinkText}>Use demo account</Text>
+            <Text style={styles.demoLinkText}>{t.demoAccount}</Text>
           </Pressable>
 
           <Pressable
@@ -153,21 +183,21 @@ export default function LoginScreen() {
               style={styles.loginGradient}
             >
               {isLoading ? (
-                <Text style={styles.loginText}>Signing in...</Text>
+                <Text style={styles.loginText}>{t.signingIn}</Text>
               ) : (
-                <Text style={styles.loginText}>Sign In</Text>
+                <Text style={styles.loginText}>{t.signIn}</Text>
               )}
             </LinearGradient>
           </Pressable>
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account?</Text>
+          <Text style={styles.footerText}>{t.noAccount}</Text>
           <Pressable
             onPress={() => router.push("/(auth)/register")}
             hitSlop={8}
           >
-            <Text style={styles.footerLink}>Sign Up</Text>
+            <Text style={styles.footerLink}>{t.signUp}</Text>
           </Pressable>
         </View>
       </KeyboardAwareScrollViewCompat>
