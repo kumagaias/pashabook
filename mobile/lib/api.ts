@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./firebase";
+import { Platform } from "react-native";
 
 export interface UploadResponse {
   jobId: string;
@@ -13,7 +14,7 @@ export interface UploadError {
 
 /**
  * Upload an image to the backend API
- * @param imageUri - Local URI of the image to upload
+ * @param imageUri - Local URI of the image to upload (file:// for native, data: for web)
  * @param language - Story language (ja or en)
  * @param idToken - Firebase ID token for authentication
  * @returns Upload response with jobId
@@ -28,17 +29,24 @@ export async function uploadImage(
     // Create FormData for multipart upload
     const formData = new FormData();
 
-    // Prepare image file for upload
-    const filename = imageUri.split("/").pop() || "image.jpg";
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : "image/jpeg";
+    if (Platform.OS === "web") {
+      // Web: Convert data URL to Blob
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      formData.append("image", blob, "image.jpg");
+    } else {
+      // Native: Use file URI
+      const filename = imageUri.split("/").pop() || "image.jpg";
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : "image/jpeg";
 
-    // @ts-ignore - React Native FormData accepts this format
-    formData.append("image", {
-      uri: imageUri,
-      name: filename,
-      type,
-    });
+      // @ts-ignore - React Native FormData accepts this format
+      formData.append("image", {
+        uri: imageUri,
+        name: filename,
+        type,
+      });
+    }
 
     formData.append("language", language);
 

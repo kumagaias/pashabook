@@ -41,6 +41,35 @@ export default function CreateScreen() {
   };
 
   const pickImage = async (useCamera: boolean) => {
+    // Web platform: use HTML5 file input
+    if (Platform.OS === "web") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      if (useCamera) {
+        input.capture = "environment";
+      }
+      
+      input.onchange = async (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        const file = target.files?.[0];
+        if (file) {
+          // Convert file to data URL
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const dataUrl = event.target?.result as string;
+            setImageUri(dataUrl);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      
+      input.click();
+      return;
+    }
+
+    // Native platform: use expo-image-picker
     if (useCamera) {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
