@@ -6,6 +6,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "cache": {
+        "disabled": true
+      },
       "ios": {
         "resourceClass": "m-medium"
       },
