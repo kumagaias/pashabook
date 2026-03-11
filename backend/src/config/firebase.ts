@@ -6,8 +6,11 @@ export function initializeFirebase() {
   if (!firebaseApp) {
     // Initialize Firebase Admin SDK
     // In production, credentials are automatically loaded from environment
+    const projectId = process.env.GCP_PROJECT_ID || process.env.GCLOUD_PROJECT;
+    
     firebaseApp = admin.initializeApp({
       credential: admin.credential.applicationDefault(),
+      projectId: projectId,
     });
   }
   return firebaseApp;
