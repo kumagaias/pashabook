@@ -43,7 +43,7 @@ web-build: ## Build web app for production
 
 web-deploy: web-build ## Deploy web app to Firebase Hosting
 	@echo "Deploying to Firebase Hosting..."
-	firebase deploy --only hosting
+	./scripts/deploy-hosting.sh
 	@echo "✅ Deployed to Firebase Hosting"
 
 web-preview: web-build ## Preview web app locally

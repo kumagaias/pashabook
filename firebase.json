@@ -37,10 +37,6 @@
           }
         ]
       }
-    ],
-    "basicAuth": {
-      "username": "geminiliveagentchallenge",
-      "password": "Pb2024!LiveAgent#Challenge"
-    }
+    ]
   }
 }
