@@ -226,6 +226,11 @@ resource "google_cloud_run_service" "worker" {
         }
 
         env {
+          name  = "GCP_REGION"
+          value = var.region
+        }
+
+        env {
           name  = "GCP_LOCATION"
           value = var.region
         }
