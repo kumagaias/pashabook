@@ -119,8 +119,14 @@ export default function CreateScreen() {
           try {
             // Compress image before displaying
             const compressedDataUrl = await compressImageForWeb(file);
+            console.log("Setting image URI");
             setImageUri(compressedDataUrl);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            // Haptics doesn't work on web, skip it
+            try {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            } catch (e) {
+              // Ignore haptics errors on web
+            }
           } catch (error) {
             console.error("Image compression error:", error);
             Alert.alert(
