@@ -82,7 +82,7 @@
     "@testing-library/react-native": "^13.3.3",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.12",
-    "@types/react": "~19.2.14",
+    "@types/react": "19.2.14",
     "babel-plugin-react-compiler": "^19.0.0-beta-e993439-20250117",
     "drizzle-kit": "^0.31.4",
     "eslint": "^9.31.0",
