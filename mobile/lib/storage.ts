@@ -1,8 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
-
-// Type assertion for legacy API compatibility
-const FS = FileSystem as any;
+import * as FileSystem from "expo-file-system/legacy";
 
 export interface StoryPage {
   id: string;
@@ -42,22 +39,22 @@ const STORYBOOKS_KEY = "@pashabook_storybooks";
 const LIBRARY_KEY = "@pashabook_library";
 
 // Directory paths for local storage
-const getVideoDirectory = () => `${FS.documentDirectory}videos/`;
-const getThumbnailDirectory = () => `${FS.documentDirectory}thumbnails/`;
+const getVideoDirectory = () => `${FileSystem.documentDirectory}videos/`;
+const getThumbnailDirectory = () => `${FileSystem.documentDirectory}thumbnails/`;
 
 // Ensure directories exist
 async function ensureDirectoriesExist(): Promise<void> {
   const videoDir = getVideoDirectory();
   const thumbnailDir = getThumbnailDirectory();
 
-  const videoDirInfo = await FS.getInfoAsync(videoDir);
+  const videoDirInfo = await FileSystem.getInfoAsync(videoDir);
   if (!videoDirInfo.exists) {
-    await FS.makeDirectoryAsync(videoDir, { intermediates: true });
+    await FileSystem.makeDirectoryAsync(videoDir, { intermediates: true });
   }
 
-  const thumbnailDirInfo = await FS.getInfoAsync(thumbnailDir);
+  const thumbnailDirInfo = await FileSystem.getInfoAsync(thumbnailDir);
   if (!thumbnailDirInfo.exists) {
-    await FS.makeDirectoryAsync(thumbnailDir, { intermediates: true });
+    await FileSystem.makeDirectoryAsync(thumbnailDir, { intermediates: true });
   }
 }
 
@@ -137,7 +134,7 @@ async function downloadVideo(videoUrl: string, bookId: string): Promise<string> 
   await ensureDirectoriesExist();
   const videoUri = `${getVideoDirectory()}${bookId}.mp4`;
   
-  const downloadResult = await FS.downloadAsync(videoUrl, videoUri);
+  const downloadResult = await FileSystem.downloadAsync(videoUrl, videoUri);
   
   if (downloadResult.status !== 200) {
     throw new Error(`Failed to download video: ${downloadResult.status}`);
@@ -240,9 +237,9 @@ export async function deleteLibraryBook(bookId: string): Promise<void> {
   
   // Delete video file
   try {
-    const videoInfo = await FS.getInfoAsync(book.videoUri);
+    const videoInfo = await FileSystem.getInfoAsync(book.videoUri);
     if (videoInfo.exists) {
-      await FS.deleteAsync(book.videoUri);
+      await FileSystem.deleteAsync(book.videoUri);
     }
   } catch (error) {
     console.error("Error deleting video file:", error);
@@ -250,9 +247,9 @@ export async function deleteLibraryBook(bookId: string): Promise<void> {
   
   // Delete thumbnail file
   try {
-    const thumbnailInfo = await FS.getInfoAsync(book.thumbnailUri);
+    const thumbnailInfo = await FileSystem.getInfoAsync(book.thumbnailUri);
     if (thumbnailInfo.exists) {
-      await FS.deleteAsync(book.thumbnailUri);
+      await FileSystem.deleteAsync(book.thumbnailUri);
     }
   } catch (error) {
     console.error("Error deleting thumbnail file:", error);
