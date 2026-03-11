@@ -1,8 +1,8 @@
-.PHONY: help install test test-unit test-security clean
+.PHONY: help install test test-unit test-security clean web-build web-deploy web-preview
 
 help: ## Display available commands
 	@echo "Available commands:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $1, $2}'
 
 install: ## Install dependencies
 	@echo "Installing dependencies..."
@@ -35,6 +35,20 @@ test-security: ## Run security checks
 		echo "⚠️  gitleaks not installed. Install with: brew install gitleaks"; \
 		exit 1; \
 	fi
+
+web-build: ## Build web app for production
+	@echo "Building web app..."
+	cd mobile && npx expo export --platform web
+	@echo "✅ Web build complete (mobile/dist)"
+
+web-deploy: web-build ## Deploy web app to Firebase Hosting
+	@echo "Deploying to Firebase Hosting..."
+	firebase deploy --only hosting
+	@echo "✅ Deployed to Firebase Hosting"
+
+web-preview: web-build ## Preview web app locally
+	@echo "Starting local preview..."
+	cd mobile/dist && python3 -m http.server 8000
 
 clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."

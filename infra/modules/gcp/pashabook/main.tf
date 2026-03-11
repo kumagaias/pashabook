@@ -12,6 +12,8 @@ resource "google_project_service" "required_apis" {
     "logging.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
+    "firebase.googleapis.com",
+    "firebasehosting.googleapis.com",
   ])
 
   project            = var.project_id

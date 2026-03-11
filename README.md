@@ -114,28 +114,42 @@ npm run dev  # For local testing only
 
 ## Deployment
 
-### Backend (Already Deployed)
+### Backend (Cloud Run)
 
-The backend is deployed to Cloud Run at:
-```
-https://pashabook-worker-837474970403.asia-northeast1.run.app
-```
-
-To redeploy:
+Deploy backend to Cloud Run:
 ```bash
 cd infra
-./deploy.sh
+./scripts/deploy.sh
 ```
 
-### Mobile App
+### Web App (Firebase Hosting)
 
-For production deployment:
+Build and deploy web app:
+```bash
+make web-deploy
+```
+
+Or manually:
 ```bash
 cd mobile
-# Build for iOS
+npx expo export --platform web
+firebase deploy --only hosting
+```
+
+Preview locally:
+```bash
+make web-preview  # Opens http://localhost:8000
+```
+
+### Mobile App (iOS/Android)
+
+Build for production:
+```bash
+cd mobile
+# iOS
 eas build --platform ios
 
-# Build for Android
+# Android
 eas build --platform android
 ```
 

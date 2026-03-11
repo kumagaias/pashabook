@@ -102,3 +102,9 @@ variable "worker_image" {
   type        = string
   default     = ""
 }
+
+variable "firebase_hosting_site_id" {
+  description = "Firebase Hosting site ID"
+  type        = string
+  default     = "pashabook"
+}
