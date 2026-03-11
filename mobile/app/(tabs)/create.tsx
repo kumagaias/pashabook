@@ -44,8 +44,8 @@ const compressImageForWeb = async (file: File): Promise<string> => {
             return;
           }
 
-          // Calculate new dimensions (max 1600px on longest side for better compression)
-          const maxSize = 1600;
+          // Calculate new dimensions (max 1200px on longest side to ensure < 10MB)
+          const maxSize = 1200;
           let width = img.width;
           let height = img.height;
 
@@ -64,13 +64,23 @@ const compressImageForWeb = async (file: File): Promise<string> => {
           // Draw and compress
           ctx.drawImage(img, 0, 0, width, height);
           
-          // Convert to JPEG with 0.7 quality for smaller file size
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          // Convert to JPEG with 0.6 quality for smaller file size
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.6);
           console.log("Compression complete, data URL length:", compressedDataUrl.length);
           
           // Estimate file size (base64 is ~33% larger than binary)
           const estimatedSize = (compressedDataUrl.length * 0.75) / 1024 / 1024;
           console.log("Estimated file size:", estimatedSize.toFixed(2), "MB");
+          
+          // If still too large, compress more aggressively
+          if (estimatedSize > 8) {
+            console.log("File still too large, compressing more aggressively");
+            const smallerDataUrl = canvas.toDataURL("image/jpeg", 0.5);
+            const smallerSize = (smallerDataUrl.length * 0.75) / 1024 / 1024;
+            console.log("Smaller file size:", smallerSize.toFixed(2), "MB");
+            resolve(smallerDataUrl);
+            return;
+          }
           
           // Clean up
           img.remove();
