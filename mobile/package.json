@@ -79,10 +79,10 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@expo/ngrok": "^4.1.0",
-    "@testing-library/react-native": "^12.4.3",
+    "@testing-library/react-native": "^13.3.3",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.12",
-    "@types/react": "~19.1.10",
+    "@types/react": "~19.2.14",
     "babel-plugin-react-compiler": "^19.0.0-beta-e993439-20250117",
     "drizzle-kit": "^0.31.4",
     "eslint": "^9.31.0",
