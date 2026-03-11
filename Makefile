@@ -1,4 +1,4 @@
-.PHONY: help install test test-unit test-security clean web-build web-deploy web-preview
+.PHONY: help install test test-unit test-security clean dev-build web-build web-deploy web-preview
 
 help: ## Display available commands
 	@echo "Available commands:"
@@ -36,6 +36,11 @@ test-security: ## Run security checks
 		exit 1; \
 	fi
 
+dev-build: ## Build development app (Android/iOS)
+	@echo "Building development app..."
+	cd mobile && npx expo prebuild
+	@echo "✅ Development build complete"
+
 web-build: ## Build web app for production
 	@echo "Building web app..."
 	cd mobile && npx expo export --platform web
@@ -43,7 +48,7 @@ web-build: ## Build web app for production
 
 web-deploy: web-build ## Deploy web app to Firebase Hosting
 	@echo "Deploying to Firebase Hosting..."
-	./scripts/deploy-hosting.sh
+	cd mobile && firebase deploy --only hosting
 	@echo "✅ Deployed to Firebase Hosting"
 
 web-preview: web-build ## Preview web app locally

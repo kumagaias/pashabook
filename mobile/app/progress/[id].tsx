@@ -168,7 +168,7 @@ export default function ProgressScreen() {
    * Poll job status from backend API
    */
   const pollJobStatus = useCallback(async () => {
-    if (!id || !book) return;
+    if (!id) return;
 
     try {
       const auth = getAuth();
@@ -179,10 +179,17 @@ export default function ProgressScreen() {
         return;
       }
 
+      // Get latest book state
+      const currentBook = await getStorybook(id);
+      if (!currentBook) {
+        setError("Storybook not found");
+        return;
+      }
+
       const idToken = await user.getIdToken();
       const jobStatus = await getJobStatus(id, idToken);
 
-      const updatedBook = await updateBookFromJobStatus(jobStatus, book);
+      const updatedBook = await updateBookFromJobStatus(jobStatus, currentBook);
 
       // Stop polling if job is complete or errored
       if (jobStatus.status === "done" || jobStatus.status === "error") {
@@ -213,23 +220,7 @@ export default function ProgressScreen() {
         }
       }
     }
-  }, [id, book, error, updateBookFromJobStatus]);
-
-  /**
-   * Start polling for job status
-   */
-  const startPolling = useCallback(() => {
-    // Clear any existing interval
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
-
-    // Poll immediately
-    pollJobStatus();
-
-    // Set up interval for subsequent polls
-    pollingIntervalRef.current = setInterval(pollJobStatus, POLLING_INTERVAL);
-  }, [pollJobStatus]);
+  }, [id, error, updateBookFromJobStatus]);
 
   /**
    * Retry after error
@@ -240,13 +231,18 @@ export default function ProgressScreen() {
     
     try {
       await pollJobStatus();
-      startPolling();
+      
+      // Restart polling
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+      pollingIntervalRef.current = setInterval(pollJobStatus, POLLING_INTERVAL);
     } catch (err) {
       console.error("Retry error:", err);
     } finally {
       setIsRetrying(false);
     }
-  }, [pollJobStatus, startPolling]);
+  }, [pollJobStatus]);
 
   /**
    * Load storybook and start polling
@@ -264,9 +260,18 @@ export default function ProgressScreen() {
 
     // Only start polling if job is not complete
     if (data.status !== "done" && data.status !== "error") {
-      startPolling();
+      // Clear any existing interval
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+
+      // Poll immediately
+      pollJobStatus();
+
+      // Set up interval for subsequent polls
+      pollingIntervalRef.current = setInterval(pollJobStatus, POLLING_INTERVAL);
     }
-  }, [id, startPolling]);
+  }, [id, pollJobStatus]);
 
   // Initial load
   useEffect(() => {

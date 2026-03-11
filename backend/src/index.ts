@@ -1,6 +1,7 @@
 import express from 'express';
 import { initializeFirebase } from './config/firebase';
 import { config, validateConfig } from './config/gcp';
+import { apiRateLimiter, statusPollingLimiter } from './middleware/rate-limit';
 import userRoutes from './routes/user';
 import uploadRoutes from './routes/upload';
 import statusRoutes from './routes/status';
@@ -23,6 +24,9 @@ try {
 
 // Middleware
 app.use(express.json());
+
+// Rate limiting middleware
+app.use('/api', apiRateLimiter);
 
 // CORS middleware for development
 app.use((req, res, next) => {
@@ -51,8 +55,8 @@ app.use('/api/user', userRoutes);
 // Upload routes
 app.use('/api/upload', uploadRoutes);
 
-// Status routes
-app.use('/api/status', statusRoutes);
+// Status routes (with stricter rate limiting)
+app.use('/api/status', statusPollingLimiter, statusRoutes);
 
 // Video routes
 app.use('/api/video', videoRoutes);

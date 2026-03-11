@@ -81,21 +81,17 @@ See [NEXT_STEPS.md](NEXT_STEPS.md) for detailed setup instructions.
 
 ### Running Tests
 
-Backend:
 ```bash
-cd backend
-npm test
+make test              # All tests
+make test-unit         # Unit tests only
+make test-security     # Security checks
 ```
 
-Mobile:
-```bash
-cd mobile
-npm test
-```
+### Building
 
-All tests:
 ```bash
-make test
+make dev-build         # Development build (Android/iOS)
+make web-build         # Web build for production
 ```
 
 ### Local Development
@@ -116,7 +112,6 @@ npm run dev  # For local testing only
 
 ### Backend (Cloud Run)
 
-Deploy backend to Cloud Run:
 ```bash
 cd infra
 ./scripts/deploy.sh
@@ -124,36 +119,10 @@ cd infra
 
 ### Web App (Firebase Hosting)
 
-Build and deploy web app:
 ```bash
-make web-deploy
+make web-deploy        # Build and deploy
+make web-preview       # Preview locally
 ```
-
-Or manually:
-```bash
-cd mobile
-npx expo export --platform web
-firebase deploy --only hosting
-```
-
-Preview locally:
-```bash
-make web-preview  # Opens http://localhost:8000
-```
-
-### Mobile App (iOS/Android)
-
-Build for production:
-```bash
-cd mobile
-# iOS
-eas build --platform ios
-
-# Android
-eas build --platform android
-```
-
-See [Expo documentation](https://docs.expo.dev/build/introduction/) for details.
 
 ## Features
 
