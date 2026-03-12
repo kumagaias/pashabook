@@ -21,12 +21,14 @@ import { Platform } from "react-native";
 if (Platform.OS === "web") {
   const iconFontStyles = `
     @font-face {
-      src: url(${require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf")});
+      src: url(https://unpkg.com/@expo/vector-icons@14.0.0/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf) format('truetype');
       font-family: Ionicons;
+      font-display: swap;
     }
     @font-face {
-      src: url(${require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf")});
+      src: url(https://unpkg.com/@expo/vector-icons@14.0.0/build/vendor/react-native-vector-icons/Fonts/Feather.ttf) format('truetype');
       font-family: Feather;
+      font-display: swap;
     }
   `;
   const style = document.createElement("style");
