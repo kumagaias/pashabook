@@ -213,7 +213,7 @@ These are deployment-time configurations, not runtime logic in the codebase.
 12. THE Narration_Generator SHALL calculate actual duration per page by summing all character audio segment durations
 13. THE Narration_Generator SHALL update the Job record with actual durations, replacing estimated durations
 
-**Implementation Note:** Character-specific voice generation is a required feature for MVP. Duration estimation (defined in Requirement 4.18) enables parallel execution of narration and animation generation, improving overall pipeline performance. 
+**Implementation Note:** Character-specific voice generation is a required feature for MVP. Duration estimation (defined in Requirements 4.18-4.19) enables parallel execution of narration and animation generation, improving overall pipeline performance. 
 
 Animation_Engine uses estimated durations to start processing in parallel with Narration_Generator. Video_Compositor performs final synchronization using actual narration durations, adjusting video clip lengths if needed (e.g., adding static frames at the end). 
 
@@ -255,7 +255,7 @@ JSON structured output format from Story_Generator enables robust character voic
 11. THE Video_Compositor SHALL update the Job record with final video URL and status "done"
 12. THE Video_Compositor SHALL complete composition within 60 seconds
 
-**Implementation Note:** Duration adjustment compensates for differences between estimated durations (used by Animation_Engine) and actual narration durations. This enables parallel processing while maintaining perfect audio-video synchronization in the final output. The 0.3-second silence padding between narrator and character segments creates natural pacing similar to human read-aloud, preventing audio from feeling rushed. The 50ms crossfade is applied only within character dialogue transitions to smooth voice changes.
+**Implementation Note:** Duration adjustment compensates for differences between estimated durations (from Requirements 4.18-4.19, used by Animation_Engine in Requirements 6 and 7) and actual narration durations (from Requirement 8.12). This enables parallel processing while maintaining perfect audio-video synchronization in the final output. The 0.3-second silence padding between narrator and character segments creates natural pacing similar to human read-aloud, preventing audio from feeling rushed. The 50ms crossfade is applied only within character dialogue transitions to smooth voice changes.
 
 ### Requirement 10: Progress Tracking with Queue Position
 
@@ -269,18 +269,18 @@ JSON structured output format from Story_Generator enables robust character voic
 4. WHEN Job status is "error", THE Pashabook_System SHALL store an error message in the Job record
 5. THE Pashabook_System SHALL update Job timestamps on each status change
 6. THE Pashabook_System SHALL allow clients to query Job status by Job identifier
-7. THE Pashabook_System SHALL display user-friendly progress messages during generation in sequential order:
+7. THE Pashabook_System SHALL display user-friendly progress messages during generation:
    - "Analyzing your drawing..." (Image_Analyzer phase)
    - "Creating your story..." (Story_Generator phase - Gemini 2.5 Flash Image interleaved output)
    - "Generating illustrations..." (Illustration_Generator phase - only shown if fallback to Imagen 3)
-   - "Adding narration and animations..." (Parallel execution of Narration_Generator and Animation_Engine)
+   - "Adding narration and animations..." (Parallel execution of Narration_Generator and Animation_Engine - Requirements 6, 7, and 8)
    - "Finalizing your storybook..." (Video_Compositor phase - audio mixing and BGM)
 8. WHEN a Job is in "pending" status and Cloud Tasks queue has 3 or more active jobs, THE Pashabook_System SHALL calculate and return queue position
 9. THE Pashabook_System SHALL display queue position message "You are #N in queue" when queuePosition > 0
 10. THE Pashabook_System SHALL update queue position on each status query
 11. WHEN Job status is "done", THE Pashabook_System SHALL display a reminder message "Videos are automatically deleted after 24 hours. Save to your library to keep them." in the preview screen
 
-**Implementation Note:** Progress messages manage user expectations and reduce perceived wait time during the generation process. Queue position visibility improves user experience during peak usage (e.g., hackathon demos with multiple concurrent users). Parallel execution message ("Adding narration and animations...") reflects the optimized pipeline architecture. The 24-hour deletion reminder ensures users understand the temporary nature of server-stored videos and encourages saving to local library (Requirement 13).
+**Implementation Note:** Progress messages manage user expectations and reduce perceived wait time during the generation process. Queue position visibility improves user experience during peak usage (e.g., hackathon demos with multiple concurrent users). Parallel execution message ("Adding narration and animations...") reflects the optimized pipeline architecture where Narration_Generator (Requirement 8) and Animation_Engine (Requirements 6 and 7) execute concurrently using estimated durations from Requirements 4.18-4.19. The 24-hour deletion reminder ensures users understand the temporary nature of server-stored videos and encourages saving to local library (Requirement 13).
 
 ### Requirement 11: Video Preview, Download, and Completion Notification
 
@@ -388,7 +388,7 @@ Note: Token refresh handling is implemented in the mobile app layer, not in back
 4. THE Pashabook_System SHALL support 3 concurrent Job executions (limited by Veo 3.1 Fast API rate limits)
 5. THE Story_Generator SHALL complete interleaved generation (text and images) within 60 seconds
 
-**Implementation Note:** Gemini 2.5 Flash Image (gemini-2.5-flash-image) is selected for its cost-effectiveness ($0.10 IN / $0.40 OUT per million tokens vs. Gemini 3.1 Flash-Lite's $0.25 IN / $1.50 OUT) and availability in Google AI Studio's free tier (60 requests/minute). Interleaved generation combines story and illustration generation into a single API call, potentially reducing total pipeline time compared to separate API calls.
+**Implementation Note:** Gemini 2.5 Flash Image (model identifier: gemini-2.5-flash-image) is selected for its cost-effectiveness ($0.10 IN / $0.40 OUT per million tokens vs. Gemini 3.1 Flash-Lite's $0.25 IN / $1.50 OUT) and availability in Google AI Studio's free tier (60 requests/minute). Interleaved generation combines story and illustration generation into a single API call, potentially reducing total pipeline time compared to separate API calls.
 
 **Concurrency Limitation Note:** The 3 concurrent job limit is imposed by Veo 3.1 Fast API rate limits. During hackathon demos with multiple concurrent users:
 - Users 1-3: Immediate processing
