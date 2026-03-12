@@ -58,3 +58,9 @@ output "artifact_registry_location" {
   value       = var.region
 }
 
+output "firebase_service_account_key" {
+  description = "Firebase Hosting deployer service account key (base64 encoded JSON)"
+  value       = google_service_account_key.firebase_deployer.private_key
+  sensitive   = true
+}
+

@@ -57,3 +57,9 @@ output "github_actions_service_account_email" {
   description = "Service account email for GitHub Actions"
   value       = module.pashabook.github_actions_service_account_email
 }
+
+output "firebase_service_account_key" {
+  description = "Firebase Hosting deployer service account key (base64 encoded JSON)"
+  value       = module.pashabook.firebase_service_account_key
+  sensitive   = true
+}

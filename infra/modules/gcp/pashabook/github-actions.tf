@@ -42,6 +42,30 @@ resource "google_service_account" "github_actions" {
   description  = "Service account for GitHub Actions CI/CD"
 }
 
+# Service Account for Firebase Hosting deployment
+resource "google_service_account" "firebase_deployer" {
+  account_id   = "firebase-hosting-deployer"
+  display_name = "Firebase Hosting Deployer"
+  description  = "Service account for Firebase Hosting deployment via GitHub Actions"
+}
+
+# Grant Firebase Hosting permissions
+resource "google_project_iam_member" "firebase_deployer_permissions" {
+  for_each = toset([
+    "roles/firebasehosting.admin",
+    "roles/iam.serviceAccountUser",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.firebase_deployer.email}"
+}
+
+# Create and download service account key
+resource "google_service_account_key" "firebase_deployer" {
+  service_account_id = google_service_account.firebase_deployer.name
+}
+
 # Grant GitHub Actions SA permissions to impersonate
 resource "google_service_account_iam_member" "github_actions_workload_identity" {
   service_account_id = google_service_account.github_actions.name
