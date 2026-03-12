@@ -40,4 +40,5 @@ module "pashabook" {
   cloud_run_max_instances         = var.cloud_run_max_instances
   cloud_run_min_instances         = var.cloud_run_min_instances
   worker_image                    = var.worker_image
+  github_repository               = var.github_repository
 }

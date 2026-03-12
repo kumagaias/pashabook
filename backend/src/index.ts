@@ -25,6 +25,9 @@ try {
 // Middleware
 app.use(express.json());
 
+// Trust proxy for Cloud Run (required for rate limiting)
+app.set('trust proxy', true);
+
 // Rate limiting middleware
 app.use('/api', apiRateLimiter);
 
@@ -46,6 +49,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     service: 'pashabook-worker',
     version: '1.0.0',
+    // GitHub Actions CI/CD enabled
   });
 });
 

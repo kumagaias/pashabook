@@ -108,3 +108,8 @@ variable "firebase_hosting_site_id" {
   type        = string
   default     = "pashabook"
 }
+
+variable "github_repository" {
+  description = "GitHub repository in format 'owner/repo'"
+  type        = string
+}

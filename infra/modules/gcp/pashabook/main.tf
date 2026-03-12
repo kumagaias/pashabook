@@ -264,6 +264,11 @@ resource "google_cloud_run_service" "worker" {
           name  = "VERTEX_AI_LOCATION"
           value = var.region
         }
+
+        env {
+          name  = "CLOUD_RUN_SERVICE_URL"
+          value = "https://pashabook-worker-147157419642.asia-northeast1.run.app"
+        }
       }
 
       timeout_seconds = var.cloud_run_timeout_seconds

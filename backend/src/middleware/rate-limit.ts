@@ -23,10 +23,15 @@ export const apiRateLimiter = rateLimit({
 /**
  * Stricter rate limiter for status polling endpoints
  * Prevents infinite loop scenarios
+ * 
+ * Calculation:
+ * - Normal polling: 2s interval = 30 req/min per user
+ * - Allow 10 concurrent users per IP = 300 req/min
+ * - Set limit to 200 req/min for safety margin
  */
 export const statusPollingLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 30, // Max 30 requests per minute (0.5 req/sec)
+  max: 200, // Max 200 requests per minute (~10 concurrent users)
   message: {
     error: 'Polling rate exceeded. Please slow down.',
     retryAfter: 60,

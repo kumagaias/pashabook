@@ -23,9 +23,9 @@ output "storage_bucket_functions_source" {
   value       = module.pashabook.storage_bucket_functions_source
 }
 
-output "worker_url" {
+output "cloud_run_url" {
   description = "URL of the Cloud Run worker service"
-  value       = module.pashabook.worker_url
+  value       = module.pashabook.cloud_run_url
 }
 
 output "tasks_queue_name" {
@@ -46,4 +46,14 @@ output "artifact_registry_repository" {
 output "artifact_registry_location" {
   description = "Location of the Artifact Registry repository"
   value       = module.pashabook.artifact_registry_location
+}
+
+output "workload_identity_provider" {
+  description = "Workload Identity Provider for GitHub Actions"
+  value       = module.pashabook.workload_identity_provider
+}
+
+output "github_actions_service_account_email" {
+  description = "Service account email for GitHub Actions"
+  value       = module.pashabook.github_actions_service_account_email
 }

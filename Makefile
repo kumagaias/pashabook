@@ -1,4 +1,4 @@
-.PHONY: help install test test-unit test-security clean dev-build web-build web-deploy web-preview
+.PHONY: help install test test-unit test-security clean dev-build web-build web-deploy web-preview backend-deploy
 
 help: ## Display available commands
 	@echo "Available commands:"
@@ -35,6 +35,11 @@ test-security: ## Run security checks
 		echo "⚠️  gitleaks not installed. Install with: brew install gitleaks"; \
 		exit 1; \
 	fi
+
+backend-deploy: ## Deploy backend to Cloud Run
+	@echo "Deploying backend to Cloud Run..."
+	cd infra && GCP_PROJECT_ID=pashabook-dev ./scripts/deploy.sh
+	@echo "✅ Backend deployed"
 
 dev-build: ## Build development app (Android/iOS)
 	@echo "Building development app..."
