@@ -165,7 +165,7 @@ This is an internal fallback mechanism. The primary method is Gemini Flash Image
 8. THE Animation_Engine SHALL store animation clips in Cloud Storage
 9. THE Animation_Engine SHALL update the Job record with animation clip URLs
 
-**Implementation Note:** Estimated durations enable parallel execution of animation and narration generation. Video_Compositor performs final synchronization using actual narration durations from Requirement 8.15.
+**Implementation Note:** Estimated durations enable parallel execution of animation and narration generation. Video_Compositor performs final synchronization using actual narration durations from Requirement 8.12.
 
 ### Requirement 7: Highlight Page Animation
 
@@ -182,7 +182,7 @@ This is an internal fallback mechanism. The primary method is Gemini Flash Image
 7. THE Animation_Engine SHALL update the Job record with Highlight_Page clip URLs
 8. THE Animation_Engine SHALL display progress message "Creating special animations..." during Veo 3.1 Fast generation
 
-**Implementation Note:** Veo 3.1 Fast is used for highlight pages to create memorable moments at story climax points. Estimated durations enable parallel execution with narration generation. Ken Burns effect serves as a reliable fallback if Veo generation fails or times out, ensuring the pipeline always completes successfully. Video_Compositor performs final synchronization using actual narration durations from Requirement 8.15.
+**Implementation Note:** Veo 3.1 Fast is used for highlight pages to create memorable moments at story climax points. Estimated durations enable parallel execution with narration generation. Ken Burns effect serves as a reliable fallback if Veo generation fails or times out, ensuring the pipeline always completes successfully. Video_Compositor performs final synchronization using actual narration durations from Requirement 8.12.
 
 **Hackathon Demo Consideration:** For hackathon demos with high concurrent usage, consider one of these approaches to prevent queue congestion:
 1. Reduce Veo timeout from 60 seconds to 30 seconds (AC 5) to fail-fast to Ken Burns
