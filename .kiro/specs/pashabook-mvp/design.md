@@ -73,6 +73,7 @@ The MVP targets the Gemini Live Agent Challenge hackathon with a focus on rapid 
 │  │        (Cloud TTS)             │    │
 │  │        - Character voices      │    │
 │  │        - Actual durations      │    │
+│  │        - 0.3s silence padding  │    │
 │  │     b) Animation Generation    │    │
 │  │        (FFmpeg/Veo 3.1 Fast)   │    │
 │  │        - Uses estimated        │    │
@@ -571,14 +572,16 @@ interface FinalVideo {
 **Implementation Note:** The compositor:
 1. Synchronizes each video clip with actual narration duration from PageNarration
 2. Adjusts clip duration if estimated duration differs from actual duration (adds static frames at end or trims excess)
-3. Inserts 0.3-second silence padding between narrator segments and character dialogue segments for natural pacing
-4. Applies 50ms crossfade transitions between character voice segments (within character dialogue only, not between narrator and character)
+3. Inserts 0.3-second silence padding between narrator segments and character dialogue segments for natural pacing (prevents audio from feeling rushed or overlapping)
+4. Applies 50ms crossfade transitions between character voice segments (within character dialogue only, not between narrator and character segments)
 5. Applies 0.5-second crossfade transitions between page clips
 6. Selects BGM track based on emotional tone (bright, adventure, sad, calm) from Cloud Storage
    - BGM path configured via environment variable: `BGM_STORAGE_PATH` (default: `gs://pashabook-assets/bgm/`)
    - Filenames: `bright.mp3`, `adventure.mp3`, `sad.mp3`, `calm.mp3`
 7. Mixes BGM at 20-30% of narration volume with 1-second fade-in/out
 8. Sends FCM push notification to user's device when composition completes
+
+The 0.3-second silence padding creates natural rhythm similar to human read-aloud, while the 50ms crossfade smooths voice changes within character dialogue.
 
 ## Data Models
 
@@ -707,10 +710,10 @@ gs://pashabook-assets/
 ### Property 4: Story Duration Estimation
 
 *For any* generated story page, the estimated duration should be calculated using language-specific formulas:
-- Japanese: (character count / 300 characters-per-minute)
+- Japanese: (character count / 250 characters-per-minute)
 - English: (word count / 180 words-per-minute)
 
-**Validates: Requirements 4.18**
+**Validates: Requirements 4.18-4.19**
 
 ### Property 5: Analysis Persistence
 
@@ -1100,13 +1103,13 @@ gs://pashabook-assets/
 
 *For any* completed story generation, the Job record should contain estimatedDurations array with one value per page.
 
-**Validates: Requirements 4.19, 8.3**
+**Validates: Requirements 4.19**
 
 ### Property 69: Actual Duration Storage
 
 *For any* completed narration generation, the Job record should contain actualDurations array with one value per page.
 
-**Validates: Requirements 8.16**
+**Validates: Requirements 8.12-8.13**
 
 ### Property 70: Duration Adjustment in Composition
 
