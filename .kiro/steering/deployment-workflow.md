@@ -33,6 +33,7 @@ This script:
 
 ## Web Deployment (Firebase Hosting)
 
+### Local deployment
 ```bash
 make web-deploy        # Build and deploy
 make web-preview       # Preview locally (http://localhost:8000)
@@ -44,6 +45,12 @@ cd mobile
 npx expo export --platform web
 firebase deploy --only hosting
 ```
+
+### CI/CD deployment (GitHub Actions)
+- Push to `main` branch → automatic deployment
+- Manual trigger: GitHub Actions > Deploy Web to Firebase Hosting > Run workflow
+- Setup: `infra/GITHUB_ACTIONS_SETUP.md`
+- Deploys to: https://pashabook-dev.web.app/
 
 ---
 
@@ -105,10 +112,11 @@ make web-build         # Web build only (no deploy)
 - Requires `trust proxy` enabled for Cloud Run
 
 ### Added: GitHub Actions CI/CD (2026-03-12)
-- Workload Identity Federation (tokenless authentication)
-- Automatic deployment on push to `main` (backend/ changes only)
-- Docker build/push to Artifact Registry in GitHub Actions
-- No local Docker build required
+- Backend: Workload Identity Federation (tokenless authentication)
+- Backend: Automatic deployment on push to `main` (backend/ changes only)
+- Backend: Docker build/push to Artifact Registry in GitHub Actions
+- Web: Firebase Hosting deployment with Service Account
+- Web: Automatic deployment on push to `main` (mobile/ changes only)
 - Setup: `infra/GITHUB_ACTIONS_SETUP.md`
 
 ---
