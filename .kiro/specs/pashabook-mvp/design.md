@@ -268,7 +268,7 @@ interface UploadSectionProps {
 ```
 
 #### ProcessingSection Component
-Displays generation progress with status updates.
+Displays generation progress with status updates and queue position.
 
 ```javascript
 interface ProcessingSectionProps {
@@ -276,6 +276,12 @@ interface ProcessingSectionProps {
   language: 'ja' | 'en'
 }
 ```
+
+**Queue Position Display:**
+- When `queuePosition > 0`, display: "You are #N in queue" (or Japanese equivalent)
+- When `queuePosition === 0` or undefined, display current processing stage message
+- Update queue position on each status poll (every 2 seconds)
+- Estimated wait time: ~3 minutes per position (based on average job completion time)
 
 #### PreviewSection Component
 Shows completed video with title editing and save/download options.
@@ -390,7 +396,7 @@ Authorization: Bearer <firebase-id-token>
 ### Processing Pipeline Services
 
 #### ImageAnalyzer
-Analyzes uploaded drawings using Gemini 2.5 Flash Image.
+Analyzes uploaded drawings using Gemini 2.0 Flash.
 
 ```typescript
 interface ImageAnalyzer {
@@ -445,6 +451,15 @@ Duration estimation uses language-specific formulas for improved accuracy:
 - English: word count / 180 words-per-minute
 
 Estimated durations enable parallel execution of narration and animation generation.
+
+**Fallback to Imagen 3:** The system falls back to Imagen 3 for illustration generation when Gemini 2.5 Flash Image interleaved output fails. Fallback is triggered by any of the following conditions:
+1. **API Error Response**: Gemini API returns 4xx or 5xx error status
+2. **Request Timeout**: Gemini request exceeds 60-second timeout threshold
+3. **Zero Images Returned**: Interleaved output contains text but no image data
+4. **Partial Image Failure**: Some pages have images but others are missing (incomplete generation)
+5. **Image Validation Failure**: Returned images fail dimension or format validation (not 1280x720, not JPEG/PNG)
+
+When fallback occurs, the system uses the story text from Gemini (if available) and generates all page illustrations via Imagen 3 using the image prompts from the story generation step.
 
 **Risk Note:** Gemini 2.5 Flash Image's image generation capability is currently experimental. Monitor fallback frequency to Imagen 3 during development. If fallback rate exceeds 20%, consider making Imagen 3 the primary method.
 
@@ -583,6 +598,13 @@ interface FinalVideo {
 
 The 0.3-second silence padding creates natural rhythm similar to human read-aloud, while the 50ms crossfade smooths voice changes within character dialogue.
 
+**Duration Adjustment Tolerance:** The system tolerates duration differences up to ±3 seconds between estimated and actual durations. Within this range:
+- Small differences (< 1 second): Minimal visual impact, Ken Burns effect continues smoothly
+- Medium differences (1-3 seconds): Acceptable quality, static frames added at end or slight speed adjustment
+- Large differences (> 3 seconds): May indicate estimation error; logged as warning for monitoring
+
+If duration difference exceeds 3 seconds, the system logs a warning but continues processing. This threshold balances performance optimization (parallel execution) with video quality. The 250 characters-per-minute formula for Japanese typically produces estimates within ±1 second of actual duration.
+
 ## Data Models
 
 ### Firestore Schema
@@ -600,7 +622,7 @@ interface Job {
   uploadedImageUrl?: string
   illustrationUrls?: string[]
   animationClipUrls?: string[]
-  narrationAudioUrl?: string
+  narrationAudioUrls?: string[] // Array of URLs for all audio segments across all pages
   finalVideoUrl?: string
   
   // Generation results
@@ -675,7 +697,11 @@ gs://pashabook-assets/
         page-2.mp4
         ...
       narration/
-        audio.mp3
+        page-1-narrator.mp3
+        page-1-protagonist.mp3
+        page-2-narrator.mp3
+        page-2-protagonist.mp3
+        ...
       final/
         video.mp4
 ```
@@ -725,243 +751,243 @@ gs://pashabook-assets/
 
 *For any* generated story, the number of pages should be between 5 and 6 inclusive.
 
-**Validates: Requirements 4.1**
+**Validates: Requirements 4.3**
 
-### Property 6: Character Description Incorporation
+### Property 7: Character Description Incorporation
 
 *For any* generated story, all character names from the analysis should appear in at least one page's narration text or image prompt.
 
-**Validates: Requirements 4.3**
+**Validates: Requirements 4.5**
 
-### Property 7: Style Description Incorporation
+### Property 8: Style Description Incorporation
 
 *For any* generated story, the style description from the analysis should appear in all image prompts.
 
-**Validates: Requirements 4.4**
+**Validates: Requirements 4.6**
 
-### Property 8: Story Title Existence
+### Property 9: Story Title Existence
 
 *For any* generated story, the title field should be non-empty.
 
-**Validates: Requirements 4.6**
+**Validates: Requirements 4.8**
 
-### Property 9: Narration Word Count Constraint
+### Property 10: Narration Word Count Constraint
 
 *For any* story page, the narration text should contain between 20 and 100 words inclusive.
 
-**Validates: Requirements 4.7**
+**Validates: Requirements 4.9**
 
-### Property 10: Image Prompt Completeness
+### Property 11: Image Prompt Completeness
 
 *For any* generated story, every page should have a non-empty image prompt.
 
-**Validates: Requirements 4.8**
+**Validates: Requirements 4.10**
 
-### Property 11: Animation Mode Validity
+### Property 12: Animation Mode Validity
 
 *For any* story page, the animation mode should be either "standard" or "highlight".
 
-**Validates: Requirements 4.9**
+**Validates: Requirements 4.12**
 
-### Property 12: Language Selection for Story Content
+### Property 13: Language Selection for Story Content
 
 *For any* story generation request with language parameter L, the generated story content should be detected as language L.
 
-**Validates: Requirements 4.10, 4.11**
+**Validates: Requirements 4.13, 4.14**
 
-### Property 13: Illustration Count Matches Page Count
+### Property 14: Illustration Count Matches Page Count
 
 *For any* generated story with N pages, the illustration generator should produce exactly N illustrations.
 
-**Validates: Requirements 5.1**
+**Validates: Requirements 5.3**
 
-### Property 14: Style in Illustration Prompts
+### Property 15: Style in Illustration Prompts
 
 *For any* illustration generation, all image prompts should contain the style description from the analysis.
 
-**Validates: Requirements 5.2**
+**Validates: Requirements 5.4**
 
-### Property 15: Characters in Illustration Prompts
+### Property 16: Characters in Illustration Prompts
 
 *For any* illustration generation, all image prompts should contain character descriptions from the analysis.
 
-**Validates: Requirements 5.3**
+**Validates: Requirements 5.5**
 
-### Property 16: Illustration Resolution
+### Property 17: Illustration Resolution
 
 *For any* generated illustration, the image dimensions should be exactly 1280x720 pixels.
 
 **Validates: Requirements 5.5**
 
-### Property 17: Illustration Storage
+### Property 18: Illustration Storage
 
 *For any* generated illustration, the image should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 5.6**
 
-### Property 18: Illustration URLs in Job Record
+### Property 19: Illustration URLs in Job Record
 
 *For any* completed illustration generation, the job record should contain URLs for all generated illustrations.
 
 **Validates: Requirements 5.7**
 
-### Property 19: Standard Page Animation Completeness
+### Property 20: Standard Page Animation Completeness
 
 *For any* story with N standard pages, the animation engine should produce exactly N standard page animations.
 
 **Validates: Requirements 6.1**
 
-### Property 20: Zoom Direction Validity
+### Property 21: Zoom Direction Validity
 
 *For any* standard page animation, the zoom direction should be either "in" or "out".
 
 **Validates: Requirements 6.3**
 
-### Property 21: Pan Direction Validity
+### Property 22: Pan Direction Validity
 
 *For any* standard page animation, the pan direction should be one of "left", "right", or "none".
 
 **Validates: Requirements 6.4**
 
-### Property 22: Standard Page Clip Duration
+### Property 23: Standard Page Clip Duration
 
-*For any* standard page animation clip, the duration should match the narration audio duration for that page (±0.1 seconds tolerance).
+*For any* standard page animation clip, the duration should match the estimated duration for that page (±0.1 seconds tolerance).
 
-**Validates: Requirements 6.5**
+**Validates: Requirements 6.6**
 
-### Property 23: Animation Clip Storage
+### Property 24: Animation Clip Storage
 
 *For any* generated animation clip, the video should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 6.7**
 
-### Property 24: Animation URLs in Job Record
+### Property 25: Animation URLs in Job Record
 
 *For any* completed animation generation, the job record should contain URLs for all animation clips.
 
 **Validates: Requirements 6.8**
 
-### Property 25: Highlight Page Animation Completeness
+### Property 26: Highlight Page Animation Completeness
 
 *For any* story with M highlight pages, the animation engine should produce exactly M highlight page animations.
 
 **Validates: Requirements 7.1**
 
-### Property 26: Highlight Page Clip Duration
+### Property 27: Highlight Page Clip Duration
 
-*For any* highlight page animation clip, the duration should match the narration audio duration for that page (±0.1 seconds tolerance).
+*For any* highlight page animation clip, the duration should match the estimated duration for that page (±0.1 seconds tolerance).
 
 **Validates: Requirements 7.2**
 
-### Property 27: Highlight Clip Storage
+### Property 28: Highlight Clip Storage
 
 *For any* generated highlight page clip, the video should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 7.6**
 
-### Property 28: Highlight URLs in Job Record
+### Property 29: Highlight URLs in Job Record
 
 *For any* completed highlight page generation, the job record should contain URLs for all highlight page clips.
 
 **Validates: Requirements 7.7**
 
-### Property 29: Narration Generation
+### Property 30: Narration Generation
 
 *For any* completed story generation, the narration generator should produce a non-empty audio file.
 
 **Validates: Requirements 8.1**
 
-### Property 30: Narration Storage
+### Property 31: Narration Storage
 
 *For any* generated narration audio, the file should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 8.5**
 
-### Property 31: Narration URL in Job Record
+### Property 32: Narration URL in Job Record
 
 *For any* completed narration generation, the job record should contain the narration audio URL.
 
 **Validates: Requirements 8.6**
 
-### Property 32: Video Clip Count
+### Property 33: Video Clip Count
 
 *For any* video composition with N pages, the final video should contain exactly N clips.
 
 **Validates: Requirements 9.1**
 
-### Property 33: Audio-Video Synchronization
+### Property 34: Audio-Video Synchronization
 
 *For any* final video, the narration audio duration should match the video duration (±0.5 seconds tolerance).
 
 **Validates: Requirements 9.3**
 
-### Property 34: Final Video Resolution
+### Property 35: Final Video Resolution
 
 *For any* final video, the dimensions should be exactly 1280x720 pixels.
 
 **Validates: Requirements 9.4**
 
-### Property 35: Final Video Format
+### Property 36: Final Video Format
 
 *For any* final video, the file format should be MP4.
 
 **Validates: Requirements 9.5**
 
-### Property 36: Final Video Storage
+### Property 37: Final Video Storage
 
 *For any* generated final video, the file should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 9.6**
 
-### Property 37: Job Status Update on Completion
+### Property 38: Job Status Update on Completion
 
 *For any* completed video composition, the job status should be "done" and the job record should contain the final video URL.
 
 **Validates: Requirements 9.7**
 
-### Property 38: Job Status Transition to Processing
+### Property 39: Job Status Transition to Processing
 
 *For any* job that begins generation, the status should transition from "pending" to "processing".
 
 **Validates: Requirements 10.1**
 
-### Property 39: Job Status Transition to Done
+### Property 40: Job Status Transition to Done
 
 *For any* job that completes successfully, the status should transition to "done".
 
 **Validates: Requirements 10.2**
 
-### Property 40: Job Status Transition to Error
+### Property 41: Job Status Transition to Error
 
 *For any* job where a component fails, the status should transition to "error".
 
 **Validates: Requirements 10.3**
 
-### Property 41: Error Message Storage
+### Property 42: Error Message Storage
 
 *For any* job with status "error", the job record should contain a non-empty error message.
 
 **Validates: Requirements 10.4**
 
-### Property 42: Timestamp Updates
+### Property 43: Timestamp Updates
 
 *For any* job status change, the updatedAt timestamp should be more recent than the previous updatedAt value.
 
 **Validates: Requirements 10.5**
 
-### Property 43: Job Query Round-Trip
+### Property 44: Job Query Round-Trip
 
 *For any* created job with ID J, querying the status endpoint with ID J should return a job record with the same ID.
 
 **Validates: Requirements 10.6**
 
-### Property 44: Signed URL Generation
+### Property 45: Signed URL Generation
 
 *For any* completed job, the video endpoint should return a signed URL that is accessible and valid for 24 hours.
 
 **Validates: Requirements 11.1**
 
-### Property 45: Download Link Availability
+### Property 46: Download Link Availability
 
 *For any* completed job, the video endpoint should return a non-empty download URL.
 
