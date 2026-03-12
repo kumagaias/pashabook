@@ -15,6 +15,25 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { LanguageProvider } from "@/lib/language-context";
+import { Platform } from "react-native";
+
+// Load icon fonts for web
+if (Platform.OS === "web") {
+  const iconFontStyles = `
+    @font-face {
+      src: url(${require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf")});
+      font-family: Ionicons;
+    }
+    @font-face {
+      src: url(${require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf")});
+      font-family: Feather;
+    }
+  `;
+  const style = document.createElement("style");
+  style.type = "text/css";
+  style.appendChild(document.createTextNode(iconFontStyles));
+  document.head.appendChild(style);
+}
 
 SplashScreen.preventAutoHideAsync();
 

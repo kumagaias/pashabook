@@ -112,16 +112,19 @@ npm run dev  # For local testing only
 
 ### Backend (Cloud Run)
 
+**CI/CD (GitHub Actions):**
+- Push to `main` → automatic deployment
+- Setup: `infra/GITHUB_ACTIONS_SETUP.md`
+
+**Local (if needed):**
 ```bash
-cd infra
-./scripts/deploy.sh
+make backend-deploy
 ```
 
 ### Web App (Firebase Hosting)
 
 ```bash
 make web-deploy        # Build and deploy
-make web-preview       # Preview locally
 ```
 
 ## Features

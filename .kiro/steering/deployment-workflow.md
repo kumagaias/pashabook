@@ -19,8 +19,9 @@ GCP_PROJECT_ID=pashabook-dev ./scripts/deploy.sh
 
 ### CI/CD deployment (GitHub Actions)
 - Push to `main` branch → automatic deployment
-- Manual trigger: Actions > Deploy Backend > Run workflow
-- Setup: See `infra/GITHUB_ACTIONS_SETUP.md`
+- Manual trigger: GitHub Actions > Deploy Backend > Run workflow
+- Setup: `infra/GITHUB_ACTIONS_SETUP.md`
+- No local Docker build required
 
 This script:
 1. Builds Docker image
@@ -85,7 +86,7 @@ make web-build         # Web build only (no deploy)
 
 ---
 
-## Recent Fixes (2026-03-11)
+## Recent Fixes (2026-03-11/12)
 
 ### Fixed: Cloud Run 500 error
 - Added `GCP_REGION=asia-northeast1` environment variable
@@ -102,6 +103,13 @@ make web-build         # Web build only (no deploy)
 - API endpoints: 100 req/min
 - Status polling: 200 req/min (~10 concurrent users)
 - Requires `trust proxy` enabled for Cloud Run
+
+### Added: GitHub Actions CI/CD (2026-03-12)
+- Workload Identity Federation (tokenless authentication)
+- Automatic deployment on push to `main` (backend/ changes only)
+- Docker build/push to Artifact Registry in GitHub Actions
+- No local Docker build required
+- Setup: `infra/GITHUB_ACTIONS_SETUP.md`
 
 ---
 
