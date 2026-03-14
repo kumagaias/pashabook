@@ -30,7 +30,30 @@
     },
     "web": {
       "favicon": "./assets/images/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "static",
+      "name": "Pashabook",
+      "shortName": "Pashabook",
+      "description": "Create magical storybooks from your child's drawings",
+      "themeColor": "#FF6B6B",
+      "backgroundColor": "#FFF9F0",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "icons": [
+        {
+          "src": "./assets/images/icon.png",
+          "sizes": "1024x1024",
+          "type": "image/png",
+          "purpose": "any"
+        },
+        {
+          "src": "./assets/images/icon.png",
+          "sizes": "1024x1024",
+          "type": "image/png",
+          "purpose": "maskable"
+        }
+      ]
     },
     "plugins": [
       "expo-dev-client",

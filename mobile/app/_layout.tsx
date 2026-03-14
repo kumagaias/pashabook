@@ -22,12 +22,12 @@ if (Platform.OS === "web") {
   const iconFontStyles = `
     @font-face {
       font-family: 'Ionicons';
-      src: url('https://cdn.jsdelivr.net/npm/@expo/vector-icons@14.0.0/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf') format('truetype');
+      src: url('https://unpkg.com/@expo/vector-icons@14.0.2/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf') format('truetype');
       font-display: swap;
     }
     @font-face {
       font-family: 'Feather';
-      src: url('https://cdn.jsdelivr.net/npm/@expo/vector-icons@14.0.0/build/vendor/react-native-vector-icons/Fonts/Feather.ttf') format('truetype');
+      src: url('https://unpkg.com/@expo/vector-icons@14.0.2/build/vendor/react-native-vector-icons/Fonts/Feather.ttf') format('truetype');
       font-display: swap;
     }
   `;
