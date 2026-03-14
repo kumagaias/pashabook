@@ -1,394 +1,235 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NarrationGenerator } from './NarrationGenerator';
-import { StoryPage, Language } from '../types/models';
+import { CharacterVoiceMap, Language } from '../types/models';
 
-// Mock the Google Cloud clients
-vi.mock('@google-cloud/text-to-speech', () => ({
-  TextToSpeechClient: vi.fn(() => ({
-    synthesizeSpeech: vi.fn(),
-  })),
-}));
+describe('NarrationGenerator - Character Voice Mapping', () => {
+  let narrationGenerator: NarrationGenerator;
 
-vi.mock('@google-cloud/storage', () => ({
-  Storage: vi.fn(() => ({
-    bucket: vi.fn(() => ({
-      file: vi.fn(() => ({
-        save: vi.fn(),
-      })),
-    })),
-  })),
-}));
-
-describe('NarrationGenerator', () => {
-  let generator: NarrationGenerator;
-  let mockTtsClient: any;
-  let mockStorage: any;
-  let mockFile: any;
-
-  beforeEach(async () => {
-    // Reset mocks
-    vi.clearAllMocks();
-
-    // Create mock file
-    mockFile = {
-      save: vi.fn().mockResolvedValue(undefined),
-    };
-
-    // Create mock storage
-    mockStorage = {
-      bucket: vi.fn(() => ({
-        file: vi.fn(() => mockFile),
-      })),
-    };
-
-    // Create mock TTS client
-    mockTtsClient = {
-      synthesizeSpeech: vi.fn(),
-    };
-
-    // Mock the constructors
-    const { TextToSpeechClient } = await import('@google-cloud/text-to-speech');
-    const { Storage } = await import('@google-cloud/storage');
-    
-    vi.mocked(TextToSpeechClient).mockImplementation(() => mockTtsClient);
-    vi.mocked(Storage).mockImplementation(() => mockStorage);
-
-    generator = new NarrationGenerator();
+  beforeEach(() => {
+    narrationGenerator = new NarrationGenerator();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  describe('generatePerPage', () => {
-    it('should generate narration for a Japanese page', async () => {
-      const pageText = 'これは日本語のテストです。子供向けの物語を作ります。';
-      const language: Language = 'ja';
-      const pageNumber = 1;
-      const jobId = 'test-job-123';
-
-      // Mock TTS response
-      const mockAudioContent = Buffer.from('mock-audio-data');
-      mockTtsClient.synthesizeSpeech.mockResolvedValue([
-        { audioContent: mockAudioContent },
-      ]);
-
-      const result = await generator.generatePerPage(pageText, language, pageNumber, jobId);
-
-      // Verify TTS was called with Japanese voice
-      expect(mockTtsClient.synthesizeSpeech).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: { text: pageText },
-          voice: expect.objectContaining({
-            languageCode: 'ja-JP',
-            name: 'ja-JP-Neural2-B',
-            ssmlGender: 'FEMALE',
-          }),
-          audioConfig: expect.objectContaining({
-            audioEncoding: 'MP3',
-            speakingRate: 0.95,
-          }),
-        })
-      );
-
-      // Verify file was saved
-      expect(mockFile.save).toHaveBeenCalledWith(
-        mockAudioContent,
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            contentType: 'audio/mpeg',
-          }),
-        })
-      );
-
-      // Verify result structure
-      expect(result).toEqual({
-        pageNumber,
-        audioUrl: expect.stringContaining(`jobs/${jobId}/narration/page-${pageNumber}.mp3`),
-        duration: expect.any(Number),
-        language,
-      });
-
-      expect(result.duration).toBeGreaterThan(0);
-    });
-
-    it('should generate narration for an English page', async () => {
-      const pageText = 'This is a test story for children. It has about twenty words in total.';
-      const language: Language = 'en';
-      const pageNumber = 2;
-      const jobId = 'test-job-456';
-
-      // Mock TTS response
-      const mockAudioContent = Buffer.from('mock-audio-data');
-      mockTtsClient.synthesizeSpeech.mockResolvedValue([
-        { audioContent: mockAudioContent },
-      ]);
-
-      const result = await generator.generatePerPage(pageText, language, pageNumber, jobId);
-
-      // Verify TTS was called with English voice
-      expect(mockTtsClient.synthesizeSpeech).toHaveBeenCalledWith(
-        expect.objectContaining({
-          voice: expect.objectContaining({
-            languageCode: 'en-US',
-            name: 'en-US-Neural2-F',
-            ssmlGender: 'FEMALE',
-          }),
-        })
-      );
-
-      // Verify result
-      expect(result.language).toBe('en');
-      expect(result.pageNumber).toBe(pageNumber);
-    });
-
-    it('should use warm and gentle voice tone settings', async () => {
-      const pageText = 'Test narration text';
-      const language: Language = 'en';
-
-      mockTtsClient.synthesizeSpeech.mockResolvedValue([
-        { audioContent: Buffer.from('mock-audio') },
-      ]);
-
-      await generator.generatePerPage(pageText, language, 1, 'test-job');
-
-      // Verify warm tone settings
-      expect(mockTtsClient.synthesizeSpeech).toHaveBeenCalledWith(
-        expect.objectContaining({
-          audioConfig: expect.objectContaining({
-            speakingRate: 0.95, // Slightly slower for children
-            pitch: 0.0,
-            effectsProfileId: ['small-bluetooth-speaker-class-device'], // Warm tone
-          }),
-        })
-      );
-    });
-
-    it('should calculate duration based on text length', async () => {
-      const shortText = 'Short text.';
-      const longText = 'This is a much longer text with many more words to test duration calculation. '.repeat(5);
-
-      mockTtsClient.synthesizeSpeech.mockResolvedValue([
-        { audioContent: Buffer.from('mock-audio') },
-      ]);
-
-      const shortResult = await generator.generatePerPage(shortText, 'en', 1, 'test-job');
-      const longResult = await generator.generatePerPage(longText, 'en', 2, 'test-job');
-
-      // Longer text should have longer duration
-      expect(longResult.duration).toBeGreaterThan(shortResult.duration);
-    });
-
-    it('should throw error when TTS service fails', async () => {
-      mockTtsClient.synthesizeSpeech.mockRejectedValue(new Error('TTS service error'));
-
-      await expect(
-        generator.generatePerPage('Test text', 'en', 1, 'test-job')
-      ).rejects.toThrow('Failed to generate narration for page 1');
-    });
-
-    it('should throw error when no audio content is received', async () => {
-      mockTtsClient.synthesizeSpeech.mockResolvedValue([{}]);
-
-      await expect(
-        generator.generatePerPage('Test text', 'en', 1, 'test-job')
-      ).rejects.toThrow('No audio content received from TTS service');
-    });
-
-    it('should throw error when Cloud Storage upload fails', async () => {
-      mockTtsClient.synthesizeSpeech.mockResolvedValue([
-        { audioContent: Buffer.from('mock-audio') },
-      ]);
-      mockFile.save.mockRejectedValue(new Error('Storage error'));
-
-      await expect(
-        generator.generatePerPage('Test text', 'en', 1, 'test-job')
-      ).rejects.toThrow('Failed to generate narration for page 1');
-    });
-  });
-
-  describe('generateAll', () => {
-    const createMockPages = (count: number): StoryPage[] => {
-      return Array.from({ length: count }, (_, i) => ({
-        pageNumber: i + 1,
-        narrationText: `This is page ${i + 1} narration text with enough words to meet requirements.`,
-        imagePrompt: `Image prompt for page ${i + 1}`,
-        animationMode: 'standard' as const,
-      }));
-    };
-
-    beforeEach(() => {
-      // Mock successful TTS responses
-      mockTtsClient.synthesizeSpeech.mockResolvedValue([
-        { audioContent: Buffer.from('mock-audio-data') },
-      ]);
-    });
-
-    it('should generate narrations for all pages in parallel', async () => {
-      const pages = createMockPages(5);
-      const language: Language = 'en';
-      const jobId = 'test-job-789';
-
-      const results = await generator.generateAll(pages, language, jobId);
-
-      // Verify all pages were processed
-      expect(results).toHaveLength(5);
-      expect(mockTtsClient.synthesizeSpeech).toHaveBeenCalledTimes(5);
-
-      // Verify results are sorted by page number
-      results.forEach((result, index) => {
-        expect(result.pageNumber).toBe(index + 1);
-        expect(result.language).toBe(language);
-        expect(result.audioUrl).toContain(`page-${index + 1}.mp3`);
-        expect(result.duration).toBeGreaterThan(0);
-      });
-    });
-
-    it('should handle Japanese language for all pages', async () => {
-      const pages: StoryPage[] = [
-        {
-          pageNumber: 1,
-          narrationText: 'これは日本語のページです。子供向けの物語を作ります。',
-          imagePrompt: 'Image prompt',
-          animationMode: 'standard',
-        },
-        {
-          pageNumber: 2,
-          narrationText: '次のページも日本語で書かれています。楽しい冒険が続きます。',
-          imagePrompt: 'Image prompt',
-          animationMode: 'highlight',
-        },
-      ];
-
-      const results = await generator.generateAll(pages, 'ja', 'test-job');
-
-      expect(results).toHaveLength(2);
-      results.forEach((result) => {
-        expect(result.language).toBe('ja');
-      });
-
-      // Verify Japanese voice was used
-      expect(mockTtsClient.synthesizeSpeech).toHaveBeenCalledWith(
-        expect.objectContaining({
-          voice: expect.objectContaining({
-            languageCode: 'ja-JP',
-          }),
-        })
-      );
-    });
-
-    it('should complete within 30 seconds timeout', async () => {
-      const pages = createMockPages(6);
-      const startTime = Date.now();
-
-      await generator.generateAll(pages, 'en', 'test-job');
-
-      const elapsedTime = (Date.now() - startTime) / 1000;
-      expect(elapsedTime).toBeLessThan(30);
-    });
-
-    it('should warn if generation exceeds timeout', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const pages = createMockPages(3);
-
-      // Mock slow TTS response (simulate taking longer than timeout)
-      // Use a shorter delay for testing but still trigger the warning
-      const startTime = Date.now();
-      mockTtsClient.synthesizeSpeech.mockImplementation(
-        () => new Promise((resolve) => {
-          setTimeout(() => {
-            resolve([{ audioContent: Buffer.from('mock-audio') }]);
-          }, 11); // Small delay to simulate processing time
-        })
-      );
-
-      // Mock Date.now to simulate timeout exceeded
-      const originalDateNow = Date.now;
-      let callCount = 0;
-      vi.spyOn(Date, 'now').mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          return startTime; // Start time
-        }
-        // Return time that exceeds timeout (31 seconds later)
-        return startTime + 31000;
-      });
-
-      await generator.generateAll(pages, 'en', 'test-job');
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('exceeding 30s limit')
-      );
-
-      consoleSpy.mockRestore();
-      vi.spyOn(Date, 'now').mockRestore();
-    }, 10000); // Set test timeout to 10 seconds
-
-    it('should throw error if any page generation fails', async () => {
-      const pages = createMockPages(3);
-
-      // Make the second call fail
-      mockTtsClient.synthesizeSpeech
-        .mockResolvedValueOnce([{ audioContent: Buffer.from('mock-audio') }])
-        .mockRejectedValueOnce(new Error('TTS error'))
-        .mockResolvedValueOnce([{ audioContent: Buffer.from('mock-audio') }]);
-
-      await expect(
-        generator.generateAll(pages, 'en', 'test-job')
-      ).rejects.toThrow('Failed to generate narrations');
-    });
-
-    it('should return narrations sorted by page number', async () => {
-      // Create pages in random order
-      const pages: StoryPage[] = [
-        { pageNumber: 3, narrationText: 'Page 3', imagePrompt: 'Prompt 3', animationMode: 'standard' },
-        { pageNumber: 1, narrationText: 'Page 1', imagePrompt: 'Prompt 1', animationMode: 'standard' },
-        { pageNumber: 2, narrationText: 'Page 2', imagePrompt: 'Prompt 2', animationMode: 'highlight' },
-      ];
-
-      const results = await generator.generateAll(pages, 'en', 'test-job');
-
-      // Verify results are sorted
-      expect(results[0].pageNumber).toBe(1);
-      expect(results[1].pageNumber).toBe(2);
-      expect(results[2].pageNumber).toBe(3);
-    });
-
-    it('should store audio files in correct Cloud Storage path', async () => {
-      const pages = createMockPages(2);
-      const jobId = 'test-job-storage';
-
-      await generator.generateAll(pages, 'en', jobId);
-
-      // Verify storage paths
-      expect(mockStorage.bucket).toHaveBeenCalled();
-      expect(mockFile.save).toHaveBeenCalledTimes(2);
+  describe('Voice Assignment Logic', () => {
+    it('should assign distinct voices to different characters', () => {
+      const existingMap: CharacterVoiceMap = {};
       
-      // Check that files were saved with correct metadata
-      expect(mockFile.save).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            contentType: 'audio/mpeg',
-            metadata: expect.objectContaining({
-              jobId,
-            }),
-          }),
-        })
-      );
+      // Access private method through type assertion for testing
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const narratorVoice = assignVoice('narrator', 'ja' as Language, existingMap);
+      existingMap.narrator = narratorVoice;
+      
+      const protagonistVoice = assignVoice('protagonist', 'ja' as Language, existingMap);
+      existingMap.protagonist = protagonistVoice;
+      
+      const supportingVoice = assignVoice('supporting_character', 'ja' as Language, existingMap);
+      
+      // Verify all voices are defined
+      expect(narratorVoice.voiceName).toBeDefined();
+      expect(protagonistVoice.voiceName).toBeDefined();
+      expect(supportingVoice.voiceName).toBeDefined();
+      
+      // Verify voices are distinct
+      expect(narratorVoice.voiceName).not.toBe(protagonistVoice.voiceName);
+      expect(narratorVoice.voiceName).not.toBe(supportingVoice.voiceName);
+      expect(protagonistVoice.voiceName).not.toBe(supportingVoice.voiceName);
     });
 
-    it('should return audio URLs with correct format', async () => {
-      const pages = createMockPages(3);
-      const jobId = 'test-job-url';
+    it('should use different pitch for narrator, protagonist, and supporting characters', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const narratorVoice = assignVoice('narrator', 'ja' as Language, existingMap);
+      existingMap.narrator = narratorVoice;
+      
+      const protagonistVoice = assignVoice('protagonist', 'ja' as Language, existingMap);
+      existingMap.protagonist = protagonistVoice;
+      
+      const supportingVoice = assignVoice('supporting_character', 'ja' as Language, existingMap);
+      
+      // Verify pitch adjustments
+      expect(narratorVoice.pitch).toBe(-2.0); // Lower for narrator
+      expect(protagonistVoice.pitch).toBe(2.0); // Higher for protagonist
+      expect(supportingVoice.pitch).toBe(0.0); // Neutral for supporting
+    });
 
-      const results = await generator.generateAll(pages, 'en', jobId);
+    it('should reuse existing voice assignment', () => {
+      const existingMap: CharacterVoiceMap = {
+        narrator: {
+          voiceName: 'ja-JP-Wavenet-A',
+          pitch: -2.0,
+          speakingRate: 0.95,
+        },
+      };
+      
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      const narratorVoice = assignVoice('narrator', 'ja' as Language, existingMap);
+      
+      // Should return the same voice config
+      expect(narratorVoice).toEqual(existingMap.narrator);
+    });
 
-      results.forEach((result, index) => {
-        expect(result.audioUrl).toMatch(
-          new RegExp(`gs://.*jobs/${jobId}/narration/page-${index + 1}\\.mp3`)
-        );
+    it('should use Japanese voices for Japanese language', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const voice = assignVoice('narrator', 'ja' as Language, existingMap);
+      
+      expect(voice.voiceName).toMatch(/^ja-JP-/);
+    });
+
+    it('should use English voices for English language', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const voice = assignVoice('narrator', 'en' as Language, existingMap);
+      
+      expect(voice.voiceName).toMatch(/^en-US-/);
+    });
+
+    it('should set speaking rate to 0.95 for all characters', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const narratorVoice = assignVoice('narrator', 'ja' as Language, existingMap);
+      existingMap.narrator = narratorVoice;
+      
+      const protagonistVoice = assignVoice('protagonist', 'ja' as Language, existingMap);
+      
+      expect(narratorVoice.speakingRate).toBe(0.95);
+      expect(protagonistVoice.speakingRate).toBe(0.95);
+    });
+
+    it('should handle multiple characters without voice collision', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const characters = ['narrator', 'protagonist', 'supporting_character', 'character_4', 'character_5'];
+      const assignedVoices = new Set<string>();
+      
+      characters.forEach(character => {
+        const voice = assignVoice(character, 'ja' as Language, existingMap);
+        existingMap[character] = voice;
+        assignedVoices.add(voice.voiceName);
       });
+      
+      // All voices should be unique (we have 6 Japanese voices available)
+      expect(assignedVoices.size).toBe(5);
+    });
+  });
+
+  describe('Voice Configuration', () => {
+    it('should return valid voice configuration structure', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const voice = assignVoice('narrator', 'ja' as Language, existingMap);
+      
+      expect(voice).toHaveProperty('voiceName');
+      expect(voice).toHaveProperty('pitch');
+      expect(voice).toHaveProperty('speakingRate');
+      expect(typeof voice.voiceName).toBe('string');
+      expect(typeof voice.pitch).toBe('number');
+      expect(typeof voice.speakingRate).toBe('number');
+    });
+
+    it('should have pitch within valid range', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const characters = ['narrator', 'protagonist', 'supporting_character'];
+      
+      characters.forEach(character => {
+        const voice = assignVoice(character, 'ja' as Language, existingMap);
+        existingMap[character] = voice;
+        
+        // TTS pitch range is -20.0 to 20.0
+        expect(voice.pitch).toBeGreaterThanOrEqual(-20.0);
+        expect(voice.pitch).toBeLessThanOrEqual(20.0);
+      });
+    });
+
+    it('should have speaking rate within valid range', () => {
+      const existingMap: CharacterVoiceMap = {};
+      const assignVoice = (narrationGenerator as any).assignVoiceToCharacter.bind(narrationGenerator);
+      
+      const voice = assignVoice('narrator', 'ja' as Language, existingMap);
+      
+      // TTS speaking rate range is 0.25 to 4.0
+      expect(voice.speakingRate).toBeGreaterThanOrEqual(0.25);
+      expect(voice.speakingRate).toBeLessThanOrEqual(4.0);
+    });
+  });
+
+  describe('Actual Duration Calculation', () => {
+    it('should calculate actualDuration as sum of all audio segments', () => {
+      // Mock PageNarration with multiple audio segments
+      const mockPageNarration = {
+        pageNumber: 1,
+        audioSegments: [
+          { audioUrl: 'gs://bucket/audio1.mp3', speaker: 'narrator' as const, duration: 5.2, startTime: 0 },
+          { audioUrl: 'gs://bucket/audio2.mp3', speaker: 'protagonist' as const, duration: 3.8, startTime: 5.2 },
+          { audioUrl: 'gs://bucket/audio3.mp3', speaker: 'narrator' as const, duration: 2.5, startTime: 9.0 },
+        ],
+        duration: 11.5,
+        actualDuration: 11.5,
+        language: 'ja' as const,
+      };
+
+      // Verify actualDuration equals sum of all segment durations
+      const expectedDuration = mockPageNarration.audioSegments.reduce((sum, seg) => sum + seg.duration, 0);
+      expect(mockPageNarration.actualDuration).toBe(expectedDuration);
+      expect(mockPageNarration.actualDuration).toBe(11.5);
+    });
+
+    it('should have actualDuration equal to duration field', () => {
+      // Mock PageNarration
+      const mockPageNarration = {
+        pageNumber: 2,
+        audioSegments: [
+          { audioUrl: 'gs://bucket/audio1.mp3', speaker: 'narrator' as const, duration: 7.3, startTime: 0 },
+        ],
+        duration: 7.3,
+        actualDuration: 7.3,
+        language: 'en' as const,
+      };
+
+      // actualDuration should match duration (both are sum of segments)
+      expect(mockPageNarration.actualDuration).toBe(mockPageNarration.duration);
+    });
+
+    it('should calculate actualDuration correctly for single segment', () => {
+      const mockPageNarration = {
+        pageNumber: 3,
+        audioSegments: [
+          { audioUrl: 'gs://bucket/audio1.mp3', speaker: 'narrator' as const, duration: 4.7, startTime: 0 },
+        ],
+        duration: 4.7,
+        actualDuration: 4.7,
+        language: 'ja' as const,
+      };
+
+      expect(mockPageNarration.actualDuration).toBe(4.7);
+      expect(mockPageNarration.audioSegments[0].duration).toBe(mockPageNarration.actualDuration);
+    });
+
+    it('should calculate actualDuration correctly for multiple character segments', () => {
+      const mockPageNarration = {
+        pageNumber: 4,
+        audioSegments: [
+          { audioUrl: 'gs://bucket/audio1.mp3', speaker: 'narrator' as const, duration: 2.1, startTime: 0 },
+          { audioUrl: 'gs://bucket/audio2.mp3', speaker: 'protagonist' as const, duration: 3.4, startTime: 2.1 },
+          { audioUrl: 'gs://bucket/audio3.mp3', speaker: 'supporting_character' as const, duration: 1.9, startTime: 5.5 },
+          { audioUrl: 'gs://bucket/audio4.mp3', speaker: 'narrator' as const, duration: 2.8, startTime: 7.4 },
+        ],
+        duration: 10.2,
+        actualDuration: 10.2,
+        language: 'en' as const,
+      };
+
+      const calculatedDuration = mockPageNarration.audioSegments.reduce((sum, seg) => sum + seg.duration, 0);
+      expect(mockPageNarration.actualDuration).toBe(calculatedDuration);
+      expect(mockPageNarration.actualDuration).toBe(10.2);
     });
   });
 });

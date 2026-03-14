@@ -73,4 +73,31 @@ router.get('/profile', verifyFirebaseToken, async (req: AuthRequest, res) => {
   }
 });
 
+// Update FCM token
+router.put('/fcm-token', verifyFirebaseToken, async (req: AuthRequest, res) => {
+  try {
+    const { fcmToken } = req.body;
+    const userId = req.user!.uid;
+
+    // Validate input
+    if (!fcmToken || typeof fcmToken !== 'string') {
+      return res.status(400).json({ error: 'Valid FCM token is required' });
+    }
+
+    const db = getFirestore();
+    const now = Timestamp.now();
+
+    // Update user profile with FCM token
+    await db.collection('users').doc(userId).update({
+      fcmToken,
+      updatedAt: now,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update FCM token error:', error);
+    res.status(500).json({ error: 'Failed to update FCM token' });
+  }
+});
+
 export default router;

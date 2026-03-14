@@ -1,8 +1,8 @@
-.PHONY: help install test test-unit test-security clean dev-build web-build web-deploy web-preview backend-deploy
+.PHONY: help install test test-unit test-security clean dev-build web-build web-deploy web-preview backend-deploy backend-update-env
 
 help: ## Display available commands
 	@echo "Available commands:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $1, $2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install dependencies
 	@echo "Installing dependencies..."
@@ -40,6 +40,11 @@ backend-deploy: ## Deploy backend to Cloud Run
 	@echo "Deploying backend to Cloud Run..."
 	cd infra && GCP_PROJECT_ID=pashabook-dev ./scripts/deploy.sh
 	@echo "✅ Backend deployed"
+
+backend-update-env: ## Update Cloud Run environment variables only
+	@echo "Updating Cloud Run environment variables..."
+	GCP_PROJECT_ID=pashabook-dev GCP_REGION=asia-northeast1 ./infra/scripts/update-env-vars.sh
+	@echo "✅ Environment variables updated"
 
 dev-build: ## Build development app (Android/iOS)
 	@echo "Building development app..."

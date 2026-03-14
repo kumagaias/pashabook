@@ -1,0 +1,61 @@
+# BGM License Information
+
+Document the license information for each BGM track used in Pashabook.
+
+## Template
+
+For each BGM file, add an entry following this format:
+
+```
+[filename].mp3
+- Track: "[Track Name]" by [Artist Name]
+- License: [License Type] (e.g., CC0, CC BY 4.0, Royalty-Free)
+- Source: [URL where track was obtained]
+- Attribution: [Required attribution text, if any]
+- Date Added: [YYYY-MM-DD]
+```
+
+## Example Entries
+
+### bright.mp3
+- Track: "Carefree" by Kevin MacLeod
+- License: CC BY 4.0
+- Source: https://incompetech.com/music/royalty-free/
+- Attribution: "Carefree" Kevin MacLeod (incompetech.com) Licensed under CC BY 4.0
+- Date Added: 2026-03-13
+
+### adventure.mp3
+- Track: "Sneaky Adventure" by Kevin MacLeod
+- License: CC BY 4.0
+- Source: https://incompetech.com/music/royalty-free/
+- Attribution: "Sneaky Adventure" Kevin MacLeod (incompetech.com) Licensed under CC BY 4.0
+- Date Added: 2026-03-13
+
+### sad.mp3
+- Track: "Meditation Impromptu 01" by Kevin MacLeod
+- License: CC BY 4.0
+- Source: https://incompetech.com/music/royalty-free/
+- Attribution: "Meditation Impromptu 01" Kevin MacLeod (incompetech.com) Licensed under CC BY 4.0
+- Date Added: 2026-03-13
+
+### calm.mp3
+- Track: "Wallpaper" by Kevin MacLeod
+- License: CC BY 4.0
+- Source: https://incompetech.com/music/royalty-free/
+- Attribution: "Wallpaper" Kevin MacLeod (incompetech.com) Licensed under CC BY 4.0
+- Date Added: 2026-03-13
+
+---
+
+## License Compliance Notes
+
+- **CC0 (Public Domain)**: No attribution required, free for commercial use
+- **CC BY 4.0**: Attribution required, free for commercial use
+- **Royalty-Free**: Check specific terms, usually requires one-time purchase
+
+## Important Reminders
+
+1. Always verify license terms before using any track
+2. Keep attribution text if required by the license
+3. Update this file whenever BGM tracks are changed
+4. For production, consider purchasing commercial licenses for higher quality

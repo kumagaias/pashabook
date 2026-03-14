@@ -42,7 +42,15 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#FF6B6B",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

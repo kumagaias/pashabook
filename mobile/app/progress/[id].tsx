@@ -132,6 +132,13 @@ export default function ProgressScreen() {
         updatedBook.progress = jobStatus.progress.percentage;
       }
 
+      // Update queue position (only when pending and position > 0)
+      if (jobStatus.queuePosition !== undefined && jobStatus.queuePosition > 0) {
+        updatedBook.queuePosition = jobStatus.queuePosition;
+      } else {
+        updatedBook.queuePosition = undefined;
+      }
+
       // Update result data when done
       if (jobStatus.status === "done" && jobStatus.result) {
         updatedBook.title = jobStatus.result.title;
@@ -355,6 +362,24 @@ export default function ProgressScreen() {
           ) : null}
         </View>
 
+        {book.queuePosition !== undefined && book.queuePosition > 0 && (
+          <Animated.View entering={FadeIn.duration(400)} style={styles.queueSection}>
+            <View style={styles.queueCard}>
+              <Ionicons name="hourglass-outline" size={24} color={Colors.primary} />
+              <Text style={styles.queueText}>
+                {lang === "ja" 
+                  ? `順番待ち: ${book.queuePosition}番目`
+                  : `You are #${book.queuePosition} in queue`}
+              </Text>
+              <Text style={styles.queueSubtext}>
+                {lang === "ja"
+                  ? `約${book.queuePosition * 3}分お待ちください`
+                  : `Estimated wait: ~${book.queuePosition * 3} minutes`}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+
         <View style={styles.progressSection}>
           <View style={styles.currentStepCard}>
             <View style={styles.stepIconWrapper}>
@@ -519,6 +544,40 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: "Inter_700Bold",
     color: Colors.text,
+    textAlign: "center",
+  },
+  queueSection: {
+    marginTop: 20,
+  },
+  queueCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.primary + "20",
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  queueText: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  queueSubtext: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
     textAlign: "center",
   },
   progressSection: {

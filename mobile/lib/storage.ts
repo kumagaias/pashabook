@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
+import { Paths, Directory, File } from "expo-file-system";
+import { getThumbnailAsync } from "expo-video-thumbnails";
 
 export interface StoryPage {
   id: string;
@@ -20,6 +21,7 @@ export interface Storybook {
   status: "pending" | "processing" | "done" | "error";
   currentStep: string;
   progress: number;
+  queuePosition?: number; // Present when status is 'pending' and position > 0
   errorMessage?: string;
   pages: StoryPage[];
   videoUrl?: string;
@@ -39,22 +41,21 @@ const STORYBOOKS_KEY = "@pashabook_storybooks";
 const LIBRARY_KEY = "@pashabook_library";
 
 // Directory paths for local storage
-const getVideoDirectory = () => `${FileSystem.documentDirectory}videos/`;
-const getThumbnailDirectory = () => `${FileSystem.documentDirectory}thumbnails/`;
+const getVideoDirectory = () => new Directory(Paths.document, "videos");
+const getThumbnailDirectory = () => new Directory(Paths.document, "thumbnails");
 
 // Ensure directories exist
 async function ensureDirectoriesExist(): Promise<void> {
   const videoDir = getVideoDirectory();
   const thumbnailDir = getThumbnailDirectory();
 
-  const videoDirInfo = await FileSystem.getInfoAsync(videoDir);
-  if (!videoDirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(videoDir, { intermediates: true });
+  // Create directories if they don't exist
+  if (!videoDir.exists) {
+    await videoDir.create();
   }
 
-  const thumbnailDirInfo = await FileSystem.getInfoAsync(thumbnailDir);
-  if (!thumbnailDirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(thumbnailDir, { intermediates: true });
+  if (!thumbnailDir.exists) {
+    await thumbnailDir.create();
   }
 }
 
@@ -132,33 +133,43 @@ export async function getLibraryBook(id: string): Promise<LibraryBook | null> {
  */
 async function downloadVideo(videoUrl: string, bookId: string): Promise<string> {
   await ensureDirectoriesExist();
-  const videoUri = `${getVideoDirectory()}${bookId}.mp4`;
+  const videoDir = getVideoDirectory();
+  const videoFile = new File(videoDir, `${bookId}.mp4`);
   
-  const downloadResult = await FileSystem.downloadAsync(videoUrl, videoUri);
+  const downloadedFile = await File.downloadFileAsync(videoUrl, videoFile, {
+    idempotent: true, // Overwrite if exists
+  });
   
-  if (downloadResult.status !== 200) {
-    throw new Error(`Failed to download video: ${downloadResult.status}`);
-  }
-  
-  return downloadResult.uri;
+  return downloadedFile.uri;
 }
 
 /**
  * Generate thumbnail from video file
- * For MVP, we'll create a simple placeholder thumbnail
- * In production, you would use expo-video-thumbnails or similar
+ * Extracts a frame at 1 second mark from the video
  */
-async function generateThumbnail(_videoUri: string, bookId: string): Promise<string> {
+async function generateThumbnail(videoUri: string, bookId: string): Promise<string> {
   await ensureDirectoriesExist();
-  const thumbnailUri = `${getThumbnailDirectory()}${bookId}.jpg`;
+  const thumbnailDir = getThumbnailDirectory();
+  const thumbnailFile = new File(thumbnailDir, `${bookId}.jpg`);
   
-  // For MVP: Just return the thumbnail URI
-  // In production, use expo-video-thumbnails:
-  // import { getThumbnailAsync } from 'expo-video-thumbnails';
-  // const { uri } = await getThumbnailAsync(videoUri, { time: 1000 });
-  // Then save the generated thumbnail to our thumbnails directory
-  
-  return thumbnailUri;
+  try {
+    // Extract thumbnail at 1 second mark
+    const { uri } = await getThumbnailAsync(videoUri, {
+      time: 1000, // 1 second in milliseconds
+    });
+    
+    // Move the generated thumbnail to our thumbnails directory
+    const tempFile = new File(uri);
+    await tempFile.copy(thumbnailFile);
+    await tempFile.delete();
+    
+    return thumbnailFile.uri;
+  } catch (error) {
+    console.error('Error generating thumbnail:', error);
+    // Return empty string if thumbnail generation fails
+    // This will cause the LibraryCard to show the placeholder icon
+    return '';
+  }
 }
 
 /**
@@ -237,9 +248,9 @@ export async function deleteLibraryBook(bookId: string): Promise<void> {
   
   // Delete video file
   try {
-    const videoInfo = await FileSystem.getInfoAsync(book.videoUri);
-    if (videoInfo.exists) {
-      await FileSystem.deleteAsync(book.videoUri);
+    const videoFile = new File(book.videoUri);
+    if (videoFile.exists) {
+      await videoFile.delete();
     }
   } catch (error) {
     console.error("Error deleting video file:", error);
@@ -247,9 +258,9 @@ export async function deleteLibraryBook(bookId: string): Promise<void> {
   
   // Delete thumbnail file
   try {
-    const thumbnailInfo = await FileSystem.getInfoAsync(book.thumbnailUri);
-    if (thumbnailInfo.exists) {
-      await FileSystem.deleteAsync(book.thumbnailUri);
+    const thumbnailFile = new File(book.thumbnailUri);
+    if (thumbnailFile.exists) {
+      await thumbnailFile.delete();
     }
   } catch (error) {
     console.error("Error deleting thumbnail file:", error);

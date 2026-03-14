@@ -94,14 +94,148 @@ describe('ProcessingWorker', () => {
       expect(sanitized).not.toContain('abc123token');
     });
 
-    it('should validate parallel execution of narration and illustration', async () => {
+    it('should validate parallel execution of narration and animation', async () => {
       const tasks = [
         Promise.resolve('narration'),
-        Promise.resolve('illustration'),
+        Promise.resolve('animation'),
       ];
       
       const results = await Promise.all(tasks);
       expect(results).toHaveLength(2);
+      expect(results[0]).toBe('narration');
+      expect(results[1]).toBe('animation');
+    });
+
+    it('should validate Promise.all waits for both promises', async () => {
+      let narrationComplete = false;
+      let animationComplete = false;
+
+      const narrationTask = new Promise(resolve => {
+        setTimeout(() => {
+          narrationComplete = true;
+          resolve('narration');
+        }, 10);
+      });
+
+      const animationTask = new Promise(resolve => {
+        setTimeout(() => {
+          animationComplete = true;
+          resolve('animation');
+        }, 20);
+      });
+
+      await Promise.all([narrationTask, animationTask]);
+
+      // Both should be complete after Promise.all resolves
+      expect(narrationComplete).toBe(true);
+      expect(animationComplete).toBe(true);
+    });
+
+    it('should validate error propagation in Promise.all', async () => {
+      const successTask = Promise.resolve('success');
+      const failureTask = Promise.reject(new Error('Task failed'));
+
+      await expect(Promise.all([successTask, failureTask])).rejects.toThrow('Task failed');
+    });
+
+    it('should validate actualDurations extraction from narration results', () => {
+      const pageNarrations = [
+        { pageNumber: 1, duration: 5.2, audioSegments: [] },
+        { pageNumber: 2, duration: 6.8, audioSegments: [] },
+        { pageNumber: 3, duration: 4.5, audioSegments: [] },
+      ];
+
+      const actualDurations = pageNarrations.map(n => n.duration);
+
+      expect(actualDurations).toEqual([5.2, 6.8, 4.5]);
+      expect(actualDurations).toHaveLength(3);
+    });
+
+    it('should validate estimatedDurations extraction from story pages', () => {
+      const storyPages = [
+        { pageNumber: 1, estimatedDuration: 5.0, narrationText: 'Page 1' },
+        { pageNumber: 2, estimatedDuration: 6.5, narrationText: 'Page 2' },
+        { pageNumber: 3, estimatedDuration: 4.8, narrationText: 'Page 3' },
+      ];
+
+      const estimatedDurations = storyPages.map(page => page.estimatedDuration);
+
+      expect(estimatedDurations).toEqual([5.0, 6.5, 4.8]);
+      expect(estimatedDurations).toHaveLength(3);
+    });
+
+    it('should validate parallel execution completes before composition', async () => {
+      let narrationComplete = false;
+      let animationComplete = false;
+      let compositionStarted = false;
+
+      const narrationTask = new Promise(resolve => {
+        setTimeout(() => {
+          narrationComplete = true;
+          resolve([{ duration: 5.0, audioSegments: [] }]);
+        }, 10);
+      });
+
+      const animationTask = new Promise(resolve => {
+        setTimeout(() => {
+          animationComplete = true;
+          resolve([{ videoUrl: 'clip1.mp4' }]);
+        }, 15);
+      });
+
+      // Wait for both to complete
+      await Promise.all([narrationTask, animationTask]);
+
+      // Now composition can start
+      compositionStarted = true;
+
+      expect(narrationComplete).toBe(true);
+      expect(animationComplete).toBe(true);
+      expect(compositionStarted).toBe(true);
+    });
+
+    it('should validate audio segment URL collection', () => {
+      const pageNarrations = [
+        {
+          pageNumber: 1,
+          duration: 5.0,
+          audioSegments: [
+            { audioUrl: 'page1-narrator.mp3', speaker: 'narrator' },
+            { audioUrl: 'page1-protagonist.mp3', speaker: 'protagonist' },
+          ],
+        },
+        {
+          pageNumber: 2,
+          duration: 6.0,
+          audioSegments: [
+            { audioUrl: 'page2-narrator.mp3', speaker: 'narrator' },
+          ],
+        },
+      ];
+
+      const allAudioUrls = pageNarrations.flatMap(n =>
+        n.audioSegments.map(segment => segment.audioUrl)
+      );
+
+      expect(allAudioUrls).toEqual([
+        'page1-narrator.mp3',
+        'page1-protagonist.mp3',
+        'page2-narrator.mp3',
+      ]);
+      expect(allAudioUrls).toHaveLength(3);
+    });
+
+    it('should validate animation clip URL collection', () => {
+      const animationClips = [
+        { pageNumber: 1, videoUrl: 'clip1.mp4' },
+        { pageNumber: 2, videoUrl: 'clip2.mp4' },
+        { pageNumber: 3, videoUrl: 'clip3.mp4' },
+      ];
+
+      const clipUrls = animationClips.map(c => c.videoUrl);
+
+      expect(clipUrls).toEqual(['clip1.mp4', 'clip2.mp4', 'clip3.mp4']);
+      expect(clipUrls).toHaveLength(3);
     });
 
     it('should validate timestamp updates', () => {

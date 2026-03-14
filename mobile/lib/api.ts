@@ -92,6 +92,7 @@ export interface JobStatus {
     stage: "analyzing" | "generating" | "illustrating" | "animating" | "narrating" | "composing";
     percentage: number;
   };
+  queuePosition?: number; // Present when status is 'pending' and position > 0
   result?: {
     title: string;
     videoUrl: string;

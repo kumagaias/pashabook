@@ -432,8 +432,9 @@ interface Story {
 
 interface StoryPage {
   pageNumber: number
-  narrationText: NarrationSegment[] // JSON structured format
-  imageUrl: string // From interleaved output
+  narrationText: string // Deprecated: kept for backward compatibility
+  narrationSegments: NarrationSegment[] // JSON structured format for character voices
+  imagePrompt: string // Prompt for illustration generation
   animationMode: 'standard' | 'highlight'
   estimatedDuration: number // seconds, calculated from word count
 }
@@ -522,13 +523,13 @@ interface NarrationGenerator {
 interface PageNarration {
   pageNumber: number
   audioSegments: AudioSegment[] // Separate audio for each character
-  totalDuration: number // seconds, sum of all segments (actual duration)
+  duration: number // Total duration in seconds (sum of all segments, actual duration)
   language: 'ja' | 'en'
 }
 
 interface AudioSegment {
   audioUrl: string // Cloud Storage URL
-  speaker: string // 'narrator' | 'protagonist' | 'supporting_character'
+  speaker: 'narrator' | 'protagonist' | 'supporting_character'
   duration: number // seconds
   startTime: number // seconds, relative to page start
 }
@@ -605,6 +606,31 @@ The 0.3-second silence padding creates natural rhythm similar to human read-alou
 
 If duration difference exceeds 3 seconds, the system logs a warning but continues processing. This threshold balances performance optimization (parallel execution) with video quality. The 250 characters-per-minute formula for Japanese typically produces estimates within ±1 second of actual duration.
 
+**Duration Adjustment Implementation Details:**
+
+When actual narration duration differs from estimated animation duration:
+
+1. **Narration shorter than animation (need to shorten video)**:
+   - **Preferred approach**: Use FFmpeg `setpts` filter to adjust playback speed by ±10% maximum
+   - Example: If animation is 10s but narration is 9s, speed up video to 1.11x (10s / 9s = 1.11)
+   - This preserves Ken Burns effect smoothness without abrupt cuts
+   - **Fallback**: If speed adjustment exceeds ±10%, trim excess frames from end and add 0.5s freeze frame to soften transition
+
+2. **Narration longer than animation (need to extend video)**:
+   - Add static frames at end (freeze last frame) to match narration duration
+   - Apply 0.3s fade-out on final frame for smooth ending
+
+3. **Speed adjustment formula**:
+   ```
+   speedFactor = estimatedDuration / actualDuration
+   if (speedFactor > 0.9 && speedFactor < 1.1):
+     use setpts filter with speedFactor
+   else:
+     use static frame extension/trimming
+   ```
+
+This approach prevents jarring mid-zoom cuts while maintaining visual quality.
+
 ## Data Models
 
 ### Firestore Schema
@@ -644,6 +670,16 @@ interface Job {
   createdAt: Timestamp
   updatedAt: Timestamp
   ttl: Timestamp // 23 hours from creation (1 hour before Cloud Storage deletion)
+}
+
+interface CharacterVoiceMap {
+  [characterName: string]: VoiceConfig // e.g., {"protagonist": {...}, "narrator": {...}}
+}
+
+interface VoiceConfig {
+  voiceName: string // e.g., 'ja-JP-Wavenet-B'
+  pitch: number // -20.0 to 20.0
+  speakingRate: number // 0.25 to 4.0
 }
 ```
 
@@ -987,12 +1023,6 @@ gs://pashabook-assets/
 
 **Validates: Requirements 11.1**
 
-### Property 46: Download Link Availability
-
-*For any* completed job, the video endpoint should return a non-empty download URL.
-
-**Validates: Requirements 11.2**
-
 ### Property 46: Title Display with Video
 
 *For any* completed job displayed in the preview section, the UI should show the story title.
@@ -1023,121 +1053,121 @@ gs://pashabook-assets/
 
 **Validates: Requirements 12.5**
 
-### Property 51: Library Save Functionality
+### Property 52: Library Save Functionality
 
 *For any* completed storybook that is saved, the library should contain an entry for that storybook.
 
 **Validates: Requirements 13.1**
 
-### Property 52: Local Storage Persistence
+### Property 53: Local Storage Persistence
 
 *For any* saved storybook, the video file should be retrievable from the device's file system and metadata should be retrievable from AsyncStorage.
 
 **Validates: Requirements 13.2, 13.3, 13.6, 13.7**
 
-### Property 53: Library Display Completeness
+### Property 54: Library Display Completeness
 
 *For any* library with N saved storybooks, the library view should display exactly N storybook cards.
 
 **Validates: Requirements 13.4**
 
-### Property 54: Library Delete Functionality
+### Property 55: Library Delete Functionality
 
 *For any* storybook deleted from the library, the library should no longer contain that storybook.
 
 **Validates: Requirements 13.5**
 
-### Property 55: Saved Storybook Fields
+### Property 56: Saved Storybook Fields
 
 *For any* saved storybook, the stored data should include title, video file URI, thumbnail URI, and creation timestamp fields.
 
 **Validates: Requirements 13.7**
 
-### Property 56: Library Thumbnail Display
+### Property 57: Library Thumbnail Display
 
 *For any* storybook in the library view, a thumbnail image should be displayed.
 
 **Validates: Requirements 13.8**
 
-### Property 57: Default Title Display
+### Property 58: Default Title Display
 
 *For any* newly generated storybook, the preview should initially display the AI-generated title.
 
 **Validates: Requirements 14.1**
 
-### Property 58: Title Edit Functionality
+### Property 59: Title Edit Functionality
 
 *For any* storybook in preview, editing the title field should update the displayed title.
 
 **Validates: Requirements 14.2**
 
-### Property 59: Custom Title Persistence
+### Property 60: Custom Title Persistence
 
 *For any* edited title that is saved, reloading the storybook should display the custom title.
 
 **Validates: Requirements 14.3**
 
-### Property 60: Custom Title in Library
+### Property 61: Custom Title in Library
 
 *For any* storybook with a custom title, the library view should display the custom title instead of the original.
 
 **Validates: Requirements 14.4**
 
-### Property 61: Upload Error Messages
+### Property 62: Upload Error Messages
 
 *For any* failed image upload, the UI should display a non-empty error message.
 
 **Validates: Requirements 17.1**
 
-### Property 62: Generation Error Messages
+### Property 63: Generation Error Messages
 
 *For any* failed generation, the UI should display a non-empty error message.
 
 **Validates: Requirements 17.2**
 
-### Property 63: Network Error Retry Option
+### Property 64: Network Error Retry Option
 
 *For any* network error, the UI should display a retry option.
 
 **Validates: Requirements 17.3**
 
-### Property 64: Error Logging
+### Property 65: Error Logging
 
 *For any* error that occurs, an entry should be created in Cloud Logging.
 
 **Validates: Requirements 17.4**
 
-### Property 65: Error Message Sanitization
+### Property 66: Error Message Sanitization
 
 *For any* error message displayed to users, the message should not contain internal implementation details (stack traces, file paths, database queries).
 
 **Validates: Requirements 17.5**
 
-### Property 66: Queue Position Calculation
+### Property 67: Queue Position Calculation
 
 *For any* job in "pending" status when Cloud Tasks queue has 3 or more active jobs, the status endpoint should return a queuePosition value greater than 0.
 
 **Validates: Requirements 10.8, 10.9**
 
-### Property 67: FCM Notification on Completion
+### Property 68: FCM Notification on Completion
 
 *For any* job that transitions to "done" status, a push notification should be sent to the user's device via Firebase Cloud Messaging.
 
 **Validates: Requirements 11.6**
 
-### Property 68: Duration Estimation Storage
+### Property 69: Duration Estimation Storage
 
 *For any* completed story generation, the Job record should contain estimatedDurations array with one value per page.
 
 **Validates: Requirements 4.19**
 
-### Property 69: Actual Duration Storage
+### Property 70: Actual Duration Storage
 
 *For any* completed narration generation, the Job record should contain actualDurations array with one value per page.
 
 **Validates: Requirements 8.12-8.13**
 
-### Property 70: Duration Adjustment in Composition
+### Property 71: Duration Adjustment in Composition
 
 *For any* video composition where animation clip duration differs from actual narration duration, the final video should have clips adjusted to match actual narration duration (±0.1 seconds tolerance).
 
@@ -1166,27 +1196,36 @@ gs://pashabook-assets/
 
 **AI Service Timeout**
 - Trigger: Gemini/Imagen/Veo request exceeds timeout
-- Action: Retry up to 3 times with exponential backoff
+- Action: Retry up to 3 times with exponential backoff (1s, 2s, 4s delays)
 - Fallback: For Veo timeout, use FFmpeg Ken Burns effect
 - Job Status: "error" if all retries fail
 - Message: "Generation timed out. Please try again."
 
 **AI Service Error**
-- Trigger: Gemini/Imagen/Veo returns error response
-- Action: Retry up to 3 times
+- Trigger: Gemini/Imagen/Veo returns error response (4xx/5xx)
+- Action: Retry up to 3 times with exponential backoff (1s, 2s, 4s delays)
 - Fallback: For Veo error, use FFmpeg Ken Burns effect
 - Job Status: "error" if all retries fail
 - Message: "AI service error. Please try again."
 
+**AI Service Rate Limit**
+- Trigger: Gemini API returns 429 (Too Many Requests) or quota exceeded error
+- Action: Exponential backoff with jitter (base delay: 2s, max delay: 32s)
+- Retry formula: `delay = min(baseDelay * 2^attempt + random(0, 1000ms), maxDelay)`
+- Max retries: 5 attempts
+- Job Status: "error" if all retries fail
+- Message: "Service temporarily unavailable. Please try again in a few minutes."
+- **Implementation Note**: Gemini 2.5 Flash Image interleaved output has large payloads. Rate limits may be hit on token throughput rather than RPM during hackathon peak usage. Exponential backoff with jitter prevents thundering herd problem.
+
 **Storage Error**
 - Trigger: Cloud Storage upload/download fails
-- Action: Retry up to 3 times
+- Action: Retry up to 3 times with exponential backoff (1s, 2s, 4s delays)
 - Job Status: "error" if all retries fail
 - Message: "Storage error. Please try again."
 
 **FFmpeg Error**
 - Trigger: Video processing fails
-- Action: Retry once
+- Action: Retry once with 2s delay
 - Job Status: "error" if retry fails
 - Message: "Video processing error. Please try again."
 
@@ -1217,6 +1256,123 @@ User-facing error messages are sanitized to remove:
 - Database queries
 - API keys or credentials
 - Internal service names
+
+## Infrastructure Configuration
+
+### Cloud Run Configuration
+
+**CPU Boost Settings**
+- Enable CPU boost for FFmpeg-intensive operations
+- Configuration: `--cpu-boost` flag in Cloud Run deployment
+- Benefit: Reduces video composition time by 30-50% (from ~20s to ~10-15s)
+- Cost impact: Minimal for hackathon demo (pay-per-use, only during active processing)
+
+**Deployment Command:**
+```bash
+gcloud run deploy pashabook-worker \
+  --image gcr.io/PROJECT_ID/pashabook-worker \
+  --cpu-boost \
+  --cpu 2 \
+  --memory 4Gi \
+  --timeout 300s \
+  --region asia-northeast1
+```
+
+**Rationale:** FFmpeg video composition (merging clips, audio mixing, Ken Burns effects) is CPU-intensive. CPU boost allocates additional CPU during container startup and processing, significantly reducing composition time. This is especially important for hackathon demos where fast turnaround creates better user experience.
+
+### Cloud Storage CORS Configuration
+
+**CORS Policy for Mobile App Access**
+
+Mobile apps (React Native/Expo) require CORS headers to access Cloud Storage resources (videos, images) from signed URLs. Without CORS configuration, the app will encounter "CORS policy" errors when attempting to play videos or display images.
+
+**CORS Configuration File (`cors.json`):**
+```json
+[
+  {
+    "origin": ["*"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Length", "Content-Range"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+**Deployment Command:**
+```bash
+gsutil cors set cors.json gs://pashabook-assets
+```
+
+**Security Note:** Using `"origin": ["*"]` is acceptable for hackathon demo with public read access. For production, restrict to specific domains:
+```json
+"origin": ["https://pashabook.app", "exp://192.168.*"]
+```
+
+**Common CORS Errors Prevented:**
+- "Access to fetch at '...' from origin '...' has been blocked by CORS policy"
+- "No 'Access-Control-Allow-Origin' header is present on the requested resource"
+- Video player fails to load signed URL content
+
+### Mobile App Share Feature (Optional)
+
+**React Native Share API Integration**
+
+Add social sharing capability to allow users to share generated storybooks directly from the app to LINE, SNS, or other platforms.
+
+**Implementation:**
+```typescript
+import { Share } from 'react-native'
+
+const shareStorybook = async (videoUrl: string, title: string) => {
+  try {
+    await Share.share({
+      message: `Check out my storybook: ${title}`,
+      url: videoUrl, // iOS only
+      title: title
+    })
+  } catch (error) {
+    console.error('Share error:', error)
+  }
+}
+```
+
+**Platform Behavior:**
+- iOS: Shares video URL via native share sheet (Messages, Mail, LINE, etc.)
+- Android: Shares message text with URL (some apps may not support direct video sharing)
+
+**UX Enhancement:** Adds "Share" button next to "Download" button in PreviewSection component. This creates a compelling demo narrative: "子供の絵がこんなに簡単にシェアできる" (Children's drawings can be shared this easily).
+
+**Implementation Priority:** Optional for MVP. Can be added post-hackathon if time permits.
+
+### Environment Variables
+
+**Required Environment Variables for Cloud Run:**
+```bash
+GCP_PROJECT_ID=pashabook-dev
+GCP_REGION=asia-northeast1
+VERTEX_AI_LOCATION=asia-northeast1
+CLOUD_RUN_SERVICE_URL=https://pashabook-worker-xxx.run.app
+BGM_STORAGE_PATH=gs://pashabook-assets/bgm/
+FIREBASE_PROJECT_ID=pashabook-dev
+```
+
+**Deployment Configuration:**
+- Set via Terraform or `gcloud run deploy --set-env-vars`
+- Store sensitive values (API keys) in Secret Manager
+- Reference secrets via `--set-secrets` flag
+
+### Deployment Checklist
+
+Before deploying to production:
+- [ ] Cloud Run CPU boost enabled
+- [ ] Cloud Storage CORS policy configured
+- [ ] Environment variables set correctly
+- [ ] BGM files uploaded to Cloud Storage
+- [ ] Firestore indexes created
+- [ ] Cloud Tasks queue configured (max 3 concurrent)
+- [ ] Firebase Authentication enabled
+- [ ] FCM configured for push notifications
+- [ ] Lifecycle policies set (24-hour TTL)
 
 ## Testing Strategy
 

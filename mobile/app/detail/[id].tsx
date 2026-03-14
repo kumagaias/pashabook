@@ -31,6 +31,7 @@ import Colors from "@/constants/colors";
 import { Storybook, getStorybook, saveStorybook } from "@/lib/storage";
 import { getVideoUrls } from "@/lib/api";
 import { getAuth } from "firebase/auth";
+import { useTranslation } from "@/lib/use-translation";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const PAGE_WIDTH = SCREEN_WIDTH - 40;
@@ -90,6 +91,7 @@ function PageCard({
 export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [book, setBook] = useState<Storybook | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -397,6 +399,18 @@ export default function DetailScreen() {
                 />
               </View>
               
+              {book.status === "done" && (
+                <Animated.View 
+                  entering={FadeInDown.delay(200).duration(400)}
+                  style={styles.reminderCard}
+                >
+                  <Ionicons name="time-outline" size={20} color={Colors.secondary} />
+                  <Text style={styles.reminderText}>
+                    {t("deletionReminder")}
+                  </Text>
+                </Animated.View>
+              )}
+              
               <Pressable
                 onPress={handleDownload}
                 style={({ pressed }) => [
@@ -678,6 +692,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: Colors.primary,
+  },
+  reminderCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.secondary + "10",
+    borderWidth: 1,
+    borderColor: Colors.secondary + "30",
+  },
+  reminderText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+    lineHeight: 19,
   },
   pagesSection: {
     gap: 14,

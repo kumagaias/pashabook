@@ -113,17 +113,50 @@ print_success "Firebase project configured"
 print_step "5" "Building Docker Image"
 cd ../backend
 print_warning "Building Cloud Run worker image (this may take several minutes)..."
-gcloud builds submit --tag $GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/pashabook/backend:latest
+IMAGE_TAG="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/pashabook/backend:latest"
+gcloud builds submit --tag $IMAGE_TAG
 print_success "Docker image built and pushed"
 cd ../infra
 
+# Get infrastructure values
+print_step "6" "Getting Infrastructure Values"
+UPLOADS_BUCKET="${GCP_PROJECT_ID}-pashabook-uploads"
+VIDEOS_BUCKET="${GCP_PROJECT_ID}-pashabook-videos"
+AUDIO_BUCKET="${GCP_PROJECT_ID}-pashabook-audio"
+IMAGES_BUCKET="${GCP_PROJECT_ID}-pashabook-images"
+ASSETS_BUCKET="${GCP_PROJECT_ID}-pashabook-assets"
+TASKS_QUEUE="dev-processing"
+PROJECT_NUMBER=$(gcloud projects describe $GCP_PROJECT_ID --format="value(projectNumber)")
+CLOUD_RUN_URL="https://pashabook-worker-${PROJECT_NUMBER}.${GCP_REGION}.run.app"
+print_success "Infrastructure values retrieved"
+
+# Deploy Cloud Run with environment variables
+print_step "7" "Deploying Cloud Run Service"
+gcloud run deploy pashabook-worker \
+  --image $IMAGE_TAG \
+  --region $GCP_REGION \
+  --platform managed \
+  --allow-unauthenticated \
+  --set-env-vars "GCP_PROJECT_ID=$GCP_PROJECT_ID" \
+  --set-env-vars "GCP_REGION=$GCP_REGION" \
+  --set-env-vars "GCP_LOCATION=$GCP_REGION" \
+  --set-env-vars "STORAGE_BUCKET_UPLOADS=$UPLOADS_BUCKET" \
+  --set-env-vars "STORAGE_BUCKET_VIDEOS=$VIDEOS_BUCKET" \
+  --set-env-vars "STORAGE_BUCKET_AUDIO=$AUDIO_BUCKET" \
+  --set-env-vars "STORAGE_BUCKET_IMAGES=$IMAGES_BUCKET" \
+  --set-env-vars "TASKS_QUEUE=$TASKS_QUEUE" \
+  --set-env-vars "VERTEX_AI_LOCATION=$GCP_REGION" \
+  --set-env-vars "CLOUD_RUN_SERVICE_URL=$CLOUD_RUN_URL" \
+  --set-env-vars "BGM_STORAGE_PATH=gs://$ASSETS_BUCKET/bgm/"
+print_success "Cloud Run service deployed with environment variables"
+
 # Package Cloud Functions
-print_step "6" "Packaging Cloud Functions"
+print_step "8" "Packaging Cloud Functions"
 print_warning "Cloud Functions are no longer used - skipping"
 print_success "Skipped (using Cloud Run only)"
 
 # Deploy Terraform infrastructure
-print_step "7" "Deploying Infrastructure with Terraform"
+print_step "9" "Deploying Infrastructure with Terraform"
 cd environments/dev
 
 if [ ! -f terraform.tfvars ]; then
@@ -144,24 +177,24 @@ print_success "Infrastructure deployed"
 cd ../..
 
 # Upload Functions source
-print_step "8" "Uploading Cloud Functions Source"
+print_step "10" "Uploading Cloud Functions Source"
 print_warning "Cloud Functions are no longer used - skipping"
 print_success "Skipped (using Cloud Run only)"
 
 # Redeploy functions with source code
-print_step "9" "Redeploying Cloud Functions"
+print_step "11" "Redeploying Cloud Functions"
 print_warning "Cloud Functions are no longer used - skipping"
 print_success "Skipped (using Cloud Run only)"
 
 # Deploy Firebase rules
-print_step "10" "Deploying Firebase Rules"
+print_step "12" "Deploying Firebase Rules"
 cd infra
 firebase deploy --only firestore:rules,storage --project $GCP_PROJECT_ID
 print_success "Firebase rules deployed"
 cd ..
 
 # Enable Firebase Authentication
-print_step "11" "Configuring Firebase Authentication"
+print_step "13" "Configuring Firebase Authentication"
 print_warning "Manual step required:"
 echo "1. Go to: https://console.firebase.google.com/project/$GCP_PROJECT_ID/authentication/providers"
 echo "2. Enable 'Email/Password' authentication"
@@ -169,7 +202,7 @@ read -p "Press Enter once you've enabled Email/Password authentication..."
 print_success "Firebase Authentication configured"
 
 # Generate mobile app config
-print_step "12" "Generating Mobile App Configuration"
+print_step "14" "Generating Mobile App Configuration"
 cd environments/dev
 WORKER_URL=$(terraform output -raw worker_url)
 cd ../..

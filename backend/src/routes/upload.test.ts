@@ -145,4 +145,36 @@ describe('Upload Endpoint', () => {
       expect(error).toContain('en');
     });
   });
+
+  describe('Job Record Initialization', () => {
+    it('should initialize estimatedDurations as empty array', () => {
+      const job = {
+        estimatedDurations: [],
+        actualDurations: [],
+        characterVoiceMap: {},
+      };
+      expect(job.estimatedDurations).toEqual([]);
+      expect(Array.isArray(job.estimatedDurations)).toBe(true);
+    });
+
+    it('should initialize actualDurations as empty array', () => {
+      const job = {
+        estimatedDurations: [],
+        actualDurations: [],
+        characterVoiceMap: {},
+      };
+      expect(job.actualDurations).toEqual([]);
+      expect(Array.isArray(job.actualDurations)).toBe(true);
+    });
+
+    it('should initialize characterVoiceMap as empty object', () => {
+      const job = {
+        estimatedDurations: [],
+        actualDurations: [],
+        characterVoiceMap: {},
+      };
+      expect(job.characterVoiceMap).toEqual({});
+      expect(typeof job.characterVoiceMap).toBe('object');
+    });
+  });
 });

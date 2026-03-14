@@ -9,6 +9,7 @@ export interface UserProfile {
   userId: string;
   name: string;
   email: string;
+  fcmToken?: string; // FCM device token for push notifications
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -29,6 +30,9 @@ export interface Job {
   // Generation results
   analysis?: AnalysisResult;
   story?: Story;
+  estimatedDurations?: number[]; // Per-page estimated durations from Story_Generator
+  actualDurations?: number[]; // Per-page actual durations from Narration_Generator
+  characterVoiceMap?: CharacterVoiceMap; // Character-to-voice mapping for consistent voices
   
   // Progress tracking
   currentStage?: ProcessingStage;
@@ -61,11 +65,18 @@ export interface Story {
   pages: StoryPage[];
 }
 
+export interface NarrationSegment {
+  text: string;
+  speaker: 'narrator' | 'protagonist' | 'supporting_character';
+}
+
 export interface StoryPage {
   pageNumber: number;
-  narrationText: string;
+  narrationText: string; // Deprecated: kept for backward compatibility
+  narrationSegments: NarrationSegment[]; // JSON structured format for character voices
   imagePrompt: string;
   animationMode: AnimationMode;
+  estimatedDuration: number; // seconds, calculated from word/character count
 }
 
 export interface Illustration {
@@ -85,9 +96,17 @@ export interface VideoClip {
 
 export interface PageNarration {
   pageNumber: number;
-  audioUrl: string;
-  duration: number;
+  audioSegments: AudioSegment[]; // Separate audio for each character
+  duration: number; // Total duration in seconds (sum of all audioSegments)
+  actualDuration: number; // Actual duration from TTS (same as duration, for VideoCompositor)
   language: Language;
+}
+
+export interface AudioSegment {
+  audioUrl: string; // Cloud Storage URL
+  speaker: 'narrator' | 'protagonist' | 'supporting_character';
+  duration: number; // seconds
+  startTime: number; // seconds, relative to page start
 }
 
 export interface FinalVideo {
@@ -101,4 +120,14 @@ export interface FinalVideo {
 export interface KenBurnsParams {
   zoomDirection: 'in' | 'out';
   panDirection: 'left' | 'right' | 'none';
+}
+
+export interface CharacterVoiceMap {
+  [characterName: string]: VoiceConfig; // e.g., {"protagonist": {...}, "narrator": {...}}
+}
+
+export interface VoiceConfig {
+  voiceName: string; // e.g., 'ja-JP-Wavenet-B'
+  pitch: number; // -20.0 to 20.0
+  speakingRate: number; // 0.25 to 4.0
 }

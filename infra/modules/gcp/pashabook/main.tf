@@ -1,3 +1,8 @@
+# Data source to get project number
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 # Enable required APIs
 resource "google_project_service" "required_apis" {
   for_each = toset([
@@ -19,6 +24,32 @@ resource "google_project_service" "required_apis" {
   project            = var.project_id
   service            = each.value
   disable_on_destroy = false
+}
+
+# Terraform state bucket (must be created manually before first apply)
+# Create with: gsutil mb -p PROJECT_ID -l REGION gs://PROJECT_ID-terraform-state
+# Enable versioning: gsutil versioning set on gs://PROJECT_ID-terraform-state
+resource "google_storage_bucket" "terraform_state" {
+  name          = "${var.project_id}-terraform-state"
+  location      = var.region
+  force_destroy = false # Protect state files from accidental deletion
+
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = true # Enable versioning for state file history
+  }
+
+  lifecycle_rule {
+    condition {
+      num_newer_versions = 10 # Keep last 10 versions
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  depends_on = [google_project_service.required_apis]
 }
 
 # Artifact Registry repository for Docker images
@@ -209,10 +240,10 @@ resource "google_cloud_run_service" "worker" {
   template {
     spec {
       service_account_name = google_service_account.backend.email
-      
+
       containers {
         image = var.worker_image != "" ? var.worker_image : "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repository_id}/backend:latest"
-        
+
         resources {
           limits = {
             cpu    = var.cloud_run_cpu
@@ -267,7 +298,12 @@ resource "google_cloud_run_service" "worker" {
 
         env {
           name  = "CLOUD_RUN_SERVICE_URL"
-          value = "https://pashabook-worker-147157419642.asia-northeast1.run.app"
+          value = "https://pashabook-worker-${data.google_project.current.number}.${var.region}.run.app"
+        }
+
+        env {
+          name  = "BGM_STORAGE_PATH"
+          value = "gs://${google_storage_bucket.assets.name}/bgm/"
         }
       }
 
@@ -278,6 +314,9 @@ resource "google_cloud_run_service" "worker" {
       annotations = {
         "autoscaling.knative.dev/maxScale" = var.cloud_run_max_instances
         "autoscaling.knative.dev/minScale" = var.cloud_run_min_instances
+        # CPU boost provides additional CPU during startup and request processing
+        # Improves video composition performance (FFmpeg operations) by 30-50%
+        "run.googleapis.com/startup-cpu-boost" = "true"
       }
     }
   }

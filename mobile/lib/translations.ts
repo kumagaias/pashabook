@@ -39,6 +39,7 @@ export const translations = {
     saveToLibrary: "Save to Library",
     download: "Download",
     editTitle: "Edit Title",
+    deletionReminder: "Videos are automatically deleted after 24 hours. Save to your library to keep them.",
     
     // Library
     library: "Library",
@@ -106,6 +107,7 @@ export const translations = {
     saveToLibrary: "ライブラリに保存",
     download: "ダウンロード",
     editTitle: "タイトルを編集",
+    deletionReminder: "動画は24時間後に自動削除されます。保存するにはライブラリに追加してください。",
     
     // Library
     library: "ライブラリ",

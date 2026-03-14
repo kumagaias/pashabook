@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useMemo,
   ReactNode,
+  useRef,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -22,6 +23,13 @@ import {
   User as FirebaseUser,
 } from "firebase/auth";
 import { firebaseConfig, API_BASE_URL } from "./firebase";
+import {
+  registerForPushNotifications,
+  updateFCMToken,
+  setupNotificationListener,
+  setupNotificationResponseListener,
+} from "./notification-service";
+import { useRouter } from "expo-router";
 
 interface User {
   id: string;
@@ -84,6 +92,75 @@ auth = getAuth(firebaseApp);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const notificationListenerRef = useRef<any>(null);
+  const foregroundListenerRef = useRef<any>(null);
+
+  // Setup FCM token management
+  useEffect(() => {
+    const setupFCM = async () => {
+      if (!auth.currentUser) return;
+
+      try {
+        // Register for push notifications
+        const fcmToken = await registerForPushNotifications();
+        
+        if (fcmToken) {
+          // Get ID token and update FCM token in Firestore
+          const idToken = await auth.currentUser.getIdToken();
+          await updateFCMToken(fcmToken, idToken);
+          console.log('FCM token registered successfully');
+        } else {
+          console.log('FCM token not available (notifications disabled or not on physical device)');
+        }
+      } catch (error) {
+        console.error('Error setting up FCM:', error);
+        // Don't throw - gracefully handle permission denied
+      }
+    };
+
+    // Setup FCM on user authentication
+    if (user) {
+      setupFCM();
+    }
+  }, [user]);
+
+  // Setup notification listeners (separate from FCM token setup)
+  useEffect(() => {
+    // Setup foreground notification listener (when app is in foreground)
+    foregroundListenerRef.current = setupNotificationListener((notification) => {
+      console.log('Received notification in foreground:', notification);
+      // Extract notification data
+      const data = notification.request.content.data;
+      console.log('Notification data:', data);
+      // Notification will be displayed automatically by the notification handler
+      // configured in notification-service.ts
+    });
+
+    // Setup notification response listener (when user taps notification)
+    notificationListenerRef.current = setupNotificationResponseListener((response) => {
+      console.log('User tapped notification:', response);
+      const data = response.notification.request.content.data;
+      const jobId = data?.jobId;
+      
+      if (jobId && typeof jobId === 'string') {
+        console.log(`Navigating to detail screen for job: ${jobId}`);
+        // Navigate to detail screen for the completed job
+        router.push(`/detail/${jobId}`);
+      } else {
+        console.warn('Notification tapped but no valid jobId found:', data);
+      }
+    });
+
+    return () => {
+      if (foregroundListenerRef.current) {
+        foregroundListenerRef.current.remove();
+      }
+      if (notificationListenerRef.current) {
+        notificationListenerRef.current.remove();
+      }
+    };
+  }, [router]);
 
   useEffect(() => {
     // Listen to Firebase auth state changes

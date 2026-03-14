@@ -128,8 +128,8 @@ describe('AnimationEngine', () => {
       const fps = 30;
       const totalFrames = Math.ceil(duration * fps);
       
-      const zoomStart = params.zoomDirection === 'in' ? 1.0 : 1.3;
-      const zoomEnd = params.zoomDirection === 'in' ? 1.3 : 1.0;
+      const zoomStart = (params.zoomDirection as 'in' | 'out') === 'in' ? 1.0 : 1.3;
+      const zoomEnd = (params.zoomDirection as 'in' | 'out') === 'in' ? 1.3 : 1.0;
       
       expect(zoomStart).toBe(1.3);
       expect(zoomEnd).toBe(1.0);
@@ -151,7 +151,7 @@ describe('AnimationEngine', () => {
   describe('animateHighlightPage', () => {
     const mockPrompt = 'A magical forest scene with animated characters';
     const mockJobId = 'test-job-123';
-    const mockNarrationDuration = 5.0;
+    const mockEstimatedDuration = 5.0;
 
     it('should attempt Veo generation first', async () => {
       // Mock Veo to throw error to test fallback
@@ -162,7 +162,7 @@ describe('AnimationEngine', () => {
         .mockResolvedValue({
           pageNumber: mockIllustration.pageNumber,
           videoUrl: 'gs://test-bucket/jobs/test-job/animations/page-1.mp4',
-          duration: mockNarrationDuration,
+          duration: mockEstimatedDuration,
           width: 1280,
           height: 720,
         });
@@ -170,14 +170,14 @@ describe('AnimationEngine', () => {
       await animationEngine.animateHighlightPage(
         mockIllustration,
         mockPrompt,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
 
       expect(generateWithVeoSpy).toHaveBeenCalledWith(
         mockIllustration,
         mockPrompt,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
       expect(animateStandardPageSpy).toHaveBeenCalled();
@@ -190,7 +190,7 @@ describe('AnimationEngine', () => {
       const fallbackClip = {
         pageNumber: mockIllustration.pageNumber,
         videoUrl: 'gs://test-bucket/jobs/test-job/animations/page-1.mp4',
-        duration: mockNarrationDuration,
+        duration: mockEstimatedDuration,
         width: 1280,
         height: 720,
       };
@@ -201,14 +201,14 @@ describe('AnimationEngine', () => {
       const result = await animationEngine.animateHighlightPage(
         mockIllustration,
         mockPrompt,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
 
       expect(result).toEqual(fallbackClip);
       expect(animateStandardPageSpy).toHaveBeenCalledWith(
         mockIllustration,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
     });
@@ -220,7 +220,7 @@ describe('AnimationEngine', () => {
       const fallbackClip = {
         pageNumber: mockIllustration.pageNumber,
         videoUrl: 'gs://test-bucket/jobs/test-job/animations/page-1.mp4',
-        duration: mockNarrationDuration,
+        duration: mockEstimatedDuration,
         width: 1280,
         height: 720,
       };
@@ -231,7 +231,7 @@ describe('AnimationEngine', () => {
       const result = await animationEngine.animateHighlightPage(
         mockIllustration,
         mockPrompt,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
 
@@ -243,7 +243,7 @@ describe('AnimationEngine', () => {
       const expectedClip = {
         pageNumber: mockIllustration.pageNumber,
         videoUrl: 'gs://test-bucket/jobs/test-job/animations/page-1.mp4',
-        duration: mockNarrationDuration,
+        duration: mockEstimatedDuration,
         width: 1280,
         height: 720,
       };
@@ -257,7 +257,7 @@ describe('AnimationEngine', () => {
       const result = await animationEngine.animateHighlightPage(
         mockIllustration,
         mockPrompt,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
 
@@ -266,10 +266,10 @@ describe('AnimationEngine', () => {
       expect(result).toHaveProperty('duration');
       expect(result).toHaveProperty('width');
       expect(result).toHaveProperty('height');
-      expect(result.duration).toBe(mockNarrationDuration);
+      expect(result.duration).toBe(mockEstimatedDuration);
     });
 
-    it('should match clip duration to narration duration', async () => {
+    it('should match clip duration to estimated duration', async () => {
       const durations = [3.5, 5.0, 7.2, 10.0];
 
       for (const duration of durations) {
@@ -306,7 +306,7 @@ describe('AnimationEngine', () => {
         const expectedClip = {
           pageNumber,
           videoUrl: `gs://test-bucket/jobs/test-job/animations/page-${pageNumber}.mp4`,
-          duration: mockNarrationDuration,
+          duration: mockEstimatedDuration,
           width: 1280,
           height: 720,
         };
@@ -320,7 +320,7 @@ describe('AnimationEngine', () => {
         const result = await animationEngine.animateHighlightPage(
           illustration,
           mockPrompt,
-          mockNarrationDuration,
+          mockEstimatedDuration,
           mockJobId
         );
 
@@ -332,7 +332,7 @@ describe('AnimationEngine', () => {
   describe('generateWithVeo', () => {
     const mockPrompt = 'A magical forest scene';
     const mockJobId = 'test-job-123';
-    const mockNarrationDuration = 5.0;
+    const mockEstimatedDuration = 5.0;
 
     it('should implement 60-second timeout', async () => {
       vi.useFakeTimers();
@@ -345,7 +345,7 @@ describe('AnimationEngine', () => {
       const promise = (animationEngine as any).generateWithVeo(
         mockIllustration,
         mockPrompt,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
 
@@ -371,7 +371,7 @@ describe('AnimationEngine', () => {
       const promise = (animationEngine as any).generateWithVeo(
         mockIllustration,
         mockPrompt,
-        mockNarrationDuration,
+        mockEstimatedDuration,
         mockJobId
       );
 
@@ -397,7 +397,7 @@ describe('AnimationEngine', () => {
         (animationEngine as any).generateWithVeo(
           mockIllustration,
           mockPrompt,
-          mockNarrationDuration,
+          mockEstimatedDuration,
           mockJobId
         )
       ).rejects.toThrow('Veo API error: Invalid request');
@@ -407,14 +407,14 @@ describe('AnimationEngine', () => {
   describe('callVeoAPI', () => {
     const mockPrompt = 'A magical forest scene';
     const mockJobId = 'test-job-123';
-    const mockNarrationDuration = 5.0;
+    const mockEstimatedDuration = 5.0;
 
     it('should throw not implemented error', async () => {
       await expect(
         (animationEngine as any).callVeoAPI(
           mockIllustration,
           mockPrompt,
-          mockNarrationDuration,
+          mockEstimatedDuration,
           mockJobId
         )
       ).rejects.toThrow('Veo API integration not yet implemented');

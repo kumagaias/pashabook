@@ -8,10 +8,13 @@ export const config = {
   storageBucketImages: process.env.STORAGE_BUCKET_IMAGES || '',
   tasksQueue: process.env.TASKS_QUEUE || 'pashabook-processing',
   
+  // BGM configuration
+  bgmStoragePath: process.env.BGM_STORAGE_PATH || 'gs://pashabook-assets/bgm/',
+  
   // AI Service endpoints
   vertexAI: {
     location: process.env.VERTEX_AI_LOCATION || 'us-central1',
-    geminiModel: 'gemini-1.5-flash-002',
+    geminiModel: 'gemini-2.0-flash-exp',
     imagenModel: 'imagen-3.0-generate-001',
     veoModel: 'veo-3.1-fast',
   },

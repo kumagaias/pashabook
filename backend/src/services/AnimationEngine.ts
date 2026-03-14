@@ -21,13 +21,13 @@ export class AnimationEngine {
   /**
    * Creates a standard page animation with Ken Burns effect
    * @param illustration - The illustration to animate
-   * @param narrationDuration - Duration of the narration audio in seconds
+   * @param estimatedDuration - Estimated duration from StoryGenerator in seconds
    * @param jobId - Job ID for storage path
    * @returns VideoClip with animation URL and duration
    */
   async animateStandardPage(
     illustration: Illustration,
-    narrationDuration: number,
+    estimatedDuration: number,
     jobId: string
   ): Promise<VideoClip> {
     const tempDir = tmpdir();
@@ -41,11 +41,11 @@ export class AnimationEngine {
       // Randomly select Ken Burns parameters
       const params = this.generateKenBurnsParams();
 
-      // Generate video with Ken Burns effect
+      // Generate video with Ken Burns effect using estimated duration
       await this.applyKenBurnsEffect(
         inputPath,
         outputPath,
-        narrationDuration,
+        estimatedDuration,
         params,
         illustration.width,
         illustration.height
@@ -76,7 +76,7 @@ export class AnimationEngine {
       return {
         pageNumber: illustration.pageNumber,
         videoUrl,
-        duration: narrationDuration,
+        duration: estimatedDuration,
         width: illustration.width,
         height: illustration.height,
       };
@@ -193,14 +193,14 @@ export class AnimationEngine {
    * Creates a highlight page animation with Veo 3.1 Fast (with FFmpeg fallback)
    * @param illustration - The illustration to animate
    * @param prompt - The image generation prompt for context
-   * @param narrationDuration - Duration of the narration audio in seconds
+   * @param estimatedDuration - Estimated duration from StoryGenerator in seconds
    * @param jobId - Job ID for storage path
    * @returns VideoClip with animation URL and duration
    */
   async animateHighlightPage(
     illustration: Illustration,
     prompt: string,
-    narrationDuration: number,
+    estimatedDuration: number,
     jobId: string
   ): Promise<VideoClip> {
     try {
@@ -208,7 +208,7 @@ export class AnimationEngine {
       const videoClip = await this.generateWithVeo(
         illustration,
         prompt,
-        narrationDuration,
+        estimatedDuration,
         jobId
       );
       return videoClip;
@@ -218,8 +218,8 @@ export class AnimationEngine {
         error
       );
       
-      // Fallback to Ken Burns effect using FFmpeg
-      return await this.animateStandardPage(illustration, narrationDuration, jobId);
+      // Fallback to Ken Burns effect using FFmpeg with estimated duration
+      return await this.animateStandardPage(illustration, estimatedDuration, jobId);
     }
   }
 
@@ -230,7 +230,7 @@ export class AnimationEngine {
   private async generateWithVeo(
     illustration: Illustration,
     prompt: string,
-    narrationDuration: number,
+    estimatedDuration: number,
     jobId: string
   ): Promise<VideoClip> {
     const timeout = config.timeouts.veo * 1000; // Convert to milliseconds
@@ -252,7 +252,7 @@ export class AnimationEngine {
     const veoPromise = this.callVeoAPI(
       illustration,
       prompt,
-      narrationDuration,
+      estimatedDuration,
       jobId
     ).then(
       (result) => {
@@ -282,7 +282,7 @@ export class AnimationEngine {
   private async callVeoAPI(
     illustration: Illustration,
     prompt: string,
-    narrationDuration: number,
+    estimatedDuration: number,
     jobId: string
   ): Promise<VideoClip> {
     // TODO: Implement actual Veo 3.1 Fast API integration
@@ -297,7 +297,7 @@ export class AnimationEngine {
     // 2. Call Vertex AI Veo 3.1 Fast API with:
     //    - Input image
     //    - Animation prompt (derived from story prompt)
-    //    - Duration parameter (narrationDuration)
+    //    - Duration parameter (estimatedDuration from StoryGenerator)
     // 3. Poll for completion or wait for callback
     // 4. Download generated video
     // 5. Upload to Cloud Storage
