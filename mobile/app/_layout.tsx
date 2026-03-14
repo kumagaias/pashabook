@@ -18,7 +18,7 @@ import { LanguageProvider } from "@/lib/language-context";
 import { Platform } from "react-native";
 
 // Load icon fonts for web
-if (Platform.OS === "web") {
+if (Platform.OS === "web" && typeof document !== "undefined") {
   const iconFontStyles = `
     @font-face {
       font-family: 'Ionicons';
