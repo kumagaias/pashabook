@@ -15,28 +15,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { LanguageProvider } from "@/lib/language-context";
-import { Platform } from "react-native";
-
-// Load icon fonts for web
-if (Platform.OS === "web" && typeof document !== "undefined") {
-  const iconFontStyles = `
-    @font-face {
-      font-family: 'Ionicons';
-      src: url('https://unpkg.com/@expo/vector-icons@14.0.2/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf') format('truetype');
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Feather';
-      src: url('https://unpkg.com/@expo/vector-icons@14.0.2/build/vendor/react-native-vector-icons/Fonts/Feather.ttf') format('truetype');
-      font-display: swap;
-    }
-  `;
-  const style = document.createElement("style");
-  style.type = "text/css";
-  style.appendChild(document.createTextNode(iconFontStyles));
-  document.head.appendChild(style);
-}
-
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {

@@ -53,12 +53,7 @@
           "type": "image/png",
           "purpose": "maskable"
         }
-      ],
-      "build": {
-        "babel": {
-          "include": ["@expo/vector-icons"]
-        }
-      }
+      ]
     },
     "plugins": [
       "expo-dev-client",
