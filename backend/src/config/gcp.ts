@@ -13,8 +13,8 @@ export const config = {
   
   // AI Service endpoints
   vertexAI: {
-    location: process.env.VERTEX_AI_LOCATION || 'asia-northeast1',
-    geminiModel: 'gemini-1.5-flash-002',
+    location: process.env.VERTEX_AI_LOCATION || 'global',
+    geminiModel: 'gemini-2.0-flash',
     imagenModel: 'imagen-3.0-generate-001',
     veoModel: 'veo-3.1-fast',
   },
