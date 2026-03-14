@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { LanguageProvider } from "@/lib/language-context";
+
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
@@ -61,6 +62,8 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    // Ioniconsフォントを明示的に読み込む
+    Ionicons: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"),
   });
 
   useEffect(() => {
