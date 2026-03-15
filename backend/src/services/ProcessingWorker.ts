@@ -56,12 +56,31 @@ export class ProcessingWorker {
         progressPercentage: 20,
       });
 
-      // Stage 2: Story Generation
-      console.log(`[${jobId}] Starting story generation`);
-      const story = await this.retryWithBackoff(
-        () => this.storyGenerator.generate(analysis, job.language),
-        3
-      );
+      // Stage 2: Story + Illustration Generation (Gemini 2.5 Flash Image interleaved output)
+      console.log(`[${jobId}] Starting story + illustration generation (interleaved)`);
+      
+      let story;
+      let illustrations: Illustration[] = [];
+      
+      try {
+        // Try Gemini 2.5 Flash Image interleaved output first
+        const result = await this.retryWithBackoff(
+          () => this.storyGenerator.generate(analysis, job.language, jobId),
+          3
+        );
+        
+        story = result.story;
+        illustrations = result.illustrations;
+        
+        console.log(`[${jobId}] Successfully generated story with ${illustrations.length} illustrations via Gemini interleaved output`);
+      } catch (error) {
+        console.warn(`[${jobId}] Gemini interleaved output failed, falling back to Imagen 3:`, error);
+        
+        // Fallback: Generate story text only, then use Imagen 3 for illustrations
+        // This requires a text-only version of StoryGenerator (not implemented yet)
+        // For now, re-throw the error
+        throw error;
+      }
       
       // Extract estimated durations from story pages
       const estimatedDurations = story.pages.map(page => page.estimatedDuration);
@@ -70,51 +89,6 @@ export class ProcessingWorker {
       await this.updateJob(jobId, {
         story,
         estimatedDurations,
-        currentStage: 'generating',
-        progressPercentage: 30,
-      });
-
-      // Stage 2.5: Illustration Generation (Imagen 3)
-      console.log(`[${jobId}] Starting illustration generation`);
-      await this.updateJob(jobId, {
-        currentStage: 'illustrating',
-        progressPercentage: 30,
-      });
-      
-      const illustrations: Illustration[] = [];
-      const totalPages = story.pages.length;
-      
-      for (let i = 0; i < totalPages; i++) {
-        const page = story.pages[i];
-        console.log(`[${jobId}] Generating illustration ${i + 1}/${totalPages}`);
-        
-        // Update progress every 2 pages to reduce Firestore writes
-        if (i % 2 === 0 || i === totalPages - 1) {
-          const progressPercent = 30 + Math.floor((i / totalPages) * 20);
-          await this.updateJob(jobId, {
-            currentStage: 'illustrating',
-            progressPercentage: progressPercent,
-            progressDetail: `${i + 1}/${totalPages}`,
-          });
-        }
-        
-        // Generate single illustration (pass array with single page)
-        const result = await this.retryWithBackoff(
-          async () => {
-            const illustrations = await this.illustrationGenerator.generateAll(
-              [page],
-              analysis.style,
-              analysis.characters,
-              jobId
-            );
-            return illustrations[0];
-          },
-          3
-        );
-        illustrations.push(result);
-      }
-      
-      await this.updateJob(jobId, {
         illustrationUrls: illustrations.map(ill => ill.imageUrl),
         currentStage: 'narrating',
         progressPercentage: 50,

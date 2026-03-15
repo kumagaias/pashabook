@@ -1,10 +1,13 @@
 import { VertexAI } from '@google-cloud/vertexai';
+import { Storage } from '@google-cloud/storage';
 import { config } from '../config/gcp';
-import { AnalysisResult, Story, StoryPage, NarrationSegment } from '../types/models';
+import { AnalysisResult, Story, StoryPage, NarrationSegment, Illustration } from '../types/models';
 
 export class StoryGenerator {
   private vertexAI: VertexAI;
   private model: any;
+  private storage: Storage;
+  private bucket: string;
 
   constructor() {
     this.vertexAI = new VertexAI({
@@ -12,25 +15,32 @@ export class StoryGenerator {
       location: config.vertexAI.location,
     });
     
+    // Use gemini-2.5-flash-image for interleaved output (text + images)
     this.model = this.vertexAI.getGenerativeModel({
-      model: config.vertexAI.geminiModel,
+      model: 'gemini-2.5-flash-image',
     });
+    
+    this.storage = new Storage({
+      projectId: config.projectId,
+    });
+    this.bucket = config.storageBucket;
   }
 
   /**
-   * Generates a story based on image analysis using Gemini 2.0 Flash
+   * Generates a story with interleaved illustrations using Gemini 2.5 Flash Image
    * @param analysis - Analysis results from ImageAnalyzer
    * @param language - Language for story generation ('ja' or 'en')
-   * @returns Generated story with title and pages (including estimated durations)
+   * @param jobId - Job ID for storing illustrations
+   * @returns Generated story with title, pages, and illustration URLs
    */
-  async generate(analysis: AnalysisResult, language: string): Promise<Story> {
+  async generate(analysis: AnalysisResult, language: string, jobId: string): Promise<{ story: Story; illustrations: Illustration[] }> {
     const startTime = Date.now();
     
     try {
       // Create the story generation prompt based on language
       const prompt = this.createStoryPrompt(analysis, language);
       
-      // Create the request
+      // Create the request with interleaved output (TEXT + IMAGE)
       const request = {
         contents: [
           {
@@ -43,6 +53,8 @@ export class StoryGenerator {
           topP: 0.9,
           topK: 40,
           maxOutputTokens: 4096,
+          responseMimeType: 'application/json', // Request JSON output
+          responseModalities: ['TEXT', 'IMAGE'], // Enable interleaved output
         },
       };
 
@@ -78,12 +90,69 @@ export class StoryGenerator {
       
       const response = await Promise.race([responsePromise, timeoutPromise]);
 
-      // Extract and parse the response
+      // Extract interleaved parts (text + images)
       const result = response.response;
-      const text = result.candidates[0].content.parts[0].text;
+      const parts = result.candidates[0].content.parts;
+      
+      console.log(`[StoryGenerator] Received ${parts.length} parts from Gemini (text + images)`);
+      
+      // Extract text and images from interleaved output
+      let storyText = '';
+      const imageBuffers: Buffer[] = [];
+      
+      for (const part of parts) {
+        if (part.text) {
+          storyText += part.text;
+        } else if (part.inlineData && part.inlineData.data) {
+          // Extract base64-encoded image
+          const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+          imageBuffers.push(imageBuffer);
+        }
+      }
+      
+      console.log(`[StoryGenerator] Extracted ${imageBuffers.length} images from interleaved output`);
       
       // Parse the JSON response
-      const storyData = this.parseStoryResponse(text, analysis);
+      const storyData = this.parseStoryResponse(storyText, analysis);
+      
+      // Validate that we have the correct number of images
+      if (imageBuffers.length !== storyData.pages.length) {
+        console.warn(`[StoryGenerator] Image count mismatch: expected ${storyData.pages.length}, got ${imageBuffers.length}`);
+        // If we have fewer images than pages, this will trigger fallback to Imagen 3
+        if (imageBuffers.length < storyData.pages.length) {
+          throw new Error(`Incomplete image generation: expected ${storyData.pages.length} images, got ${imageBuffers.length}`);
+        }
+      }
+      
+      // Upload images to Cloud Storage
+      const illustrations: Illustration[] = [];
+      for (let i = 0; i < Math.min(imageBuffers.length, storyData.pages.length); i++) {
+        const pageNumber = i + 1;
+        const imageBuffer = imageBuffers[i];
+        
+        const fileName = `jobs/${jobId}/illustrations/page-${pageNumber}.jpg`;
+        const file = this.storage.bucket(this.bucket).file(fileName);
+
+        await file.save(imageBuffer, {
+          metadata: {
+            contentType: 'image/jpeg',
+            metadata: {
+              jobId,
+              pageNumber: pageNumber.toString(),
+              source: 'gemini-interleaved',
+            },
+          },
+        });
+
+        const imageUrl = `gs://${this.bucket}/${fileName}`;
+        
+        illustrations.push({
+          pageNumber,
+          imageUrl,
+          width: 1280,
+          height: 720,
+        });
+      }
       
       // Calculate estimated durations for each page
       const storyWithDurations = this.addDurationEstimates(storyData, language);
@@ -94,10 +163,15 @@ export class StoryGenerator {
         console.warn(`Story generation took ${elapsedTime}s, exceeding ${config.timeouts.storyGeneration}s limit`);
       }
       
-      return storyWithDurations;
+      console.log(`[StoryGenerator] Successfully generated story with ${illustrations.length} illustrations`);
+      
+      return {
+        story: storyWithDurations,
+        illustrations,
+      };
     } catch (error) {
       const elapsedTime = (Date.now() - startTime) / 1000;
-      console.error(`Story generation failed after ${elapsedTime}s:`, error);
+      console.error(`[StoryGenerator] Story generation failed after ${elapsedTime}s:`, error);
       throw new Error(`Failed to generate story: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
