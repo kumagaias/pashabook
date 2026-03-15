@@ -106,6 +106,9 @@ export class ImageAnalyzer {
       const result = response.response;
       const text = result.candidates[0].content.parts[0].text;
       
+      // Log the raw response for debugging
+      console.log('[ImageAnalyzer] Raw Gemini response:', text);
+      
       // Parse the JSON response
       const analysisData = this.parseAnalysisResponse(text);
       
@@ -213,7 +216,11 @@ Please respond ONLY with valid JSON. Do not include any other text.`;
         cleanText = cleanText.replace(/```\n?/g, '');
       }
       
+      console.log('[ImageAnalyzer] Cleaned text for parsing:', cleanText.substring(0, 500));
+      
       const parsed = JSON.parse(cleanText);
+      
+      console.log('[ImageAnalyzer] Parsed JSON keys:', Object.keys(parsed));
       
       // Validate required fields
       if (!parsed.characters || !Array.isArray(parsed.characters)) {
@@ -224,8 +231,10 @@ Please respond ONLY with valid JSON. Do not include any other text.`;
         throw new Error('Missing or invalid setting field');
       }
       
+      // Style field is optional - use fallback if missing
       if (!parsed.style || typeof parsed.style !== 'string') {
-        throw new Error('Missing or invalid style field');
+        console.warn('[ImageAnalyzer] Missing style field. Using fallback. Available fields:', Object.keys(parsed));
+        parsed.style = 'colorful and child-friendly illustration style';
       }
       
       if (!parsed.emotionalTone || typeof parsed.emotionalTone !== 'string') {
@@ -254,8 +263,8 @@ Please respond ONLY with valid JSON. Do not include any other text.`;
         climaxIndicators: parsed.climaxIndicators,
       };
     } catch (error) {
-      console.error('Error parsing analysis response:', error);
-      console.error('Raw response text:', text);
+      console.error('[ImageAnalyzer] Error parsing analysis response:', error);
+      console.error('[ImageAnalyzer] Raw response text:', text);
       throw new Error(`Failed to parse analysis response: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
