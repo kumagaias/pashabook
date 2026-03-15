@@ -81,16 +81,38 @@ export class ProcessingWorker {
         progressPercentage: 30,
       });
       
-      // Generate all illustrations at once (generateAll handles the loop internally)
-      const illustrations = await this.retryWithBackoff(
-        () => this.illustrationGenerator.generateAll(
-          story.pages,
-          analysis.style,
-          analysis.characters,
-          jobId
-        ),
-        3
-      );
+      const illustrations: Illustration[] = [];
+      const totalPages = story.pages.length;
+      
+      for (let i = 0; i < totalPages; i++) {
+        const page = story.pages[i];
+        console.log(`[${jobId}] Generating illustration ${i + 1}/${totalPages}`);
+        
+        // Update progress every 2 pages to reduce Firestore writes
+        if (i % 2 === 0 || i === totalPages - 1) {
+          const progressPercent = 30 + Math.floor((i / totalPages) * 20);
+          await this.updateJob(jobId, {
+            currentStage: 'illustrating',
+            progressPercentage: progressPercent,
+            progressDetail: `${i + 1}/${totalPages}`,
+          });
+        }
+        
+        // Generate single illustration (pass array with single page)
+        const result = await this.retryWithBackoff(
+          async () => {
+            const illustrations = await this.illustrationGenerator.generateAll(
+              [page],
+              analysis.style,
+              analysis.characters,
+              jobId
+            );
+            return illustrations[0];
+          },
+          3
+        );
+        illustrations.push(result);
+      }
       
       await this.updateJob(jobId, {
         illustrationUrls: illustrations.map(ill => ill.imageUrl),
