@@ -15,7 +15,7 @@ export const config = {
   vertexAI: {
     location: process.env.VERTEX_AI_LOCATION || 'us-central1',
     geminiModel: 'gemini-2.5-flash',
-    imagenModel: 'imagen-3.0-generate-001',
+    imagenModel: 'imagen-3.0-generate-002', // Updated to latest Imagen 3 version
     veoModel: 'veo-3.1-fast',
   },
   
