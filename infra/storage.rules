@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Jobs directory - authenticated users can upload to their own job folders
+    match /jobs/{jobId}/{allPaths=**} {
+      // Allow authenticated users to upload to their job folders
+      allow write: if request.auth != null;
+      
+      // Allow read access via signed URLs (handled by backend)
+      allow read: if request.auth != null;
+    }
+    
+    // Deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

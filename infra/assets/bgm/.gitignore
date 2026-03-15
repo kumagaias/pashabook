@@ -1,0 +1,10 @@
+# Ignore all BGM files (must be added manually by each developer)
+*.mp3
+*.wav
+*.m4a
+*.ogg
+
+# Keep documentation files
+!README.md
+!.gitignore
+!LICENSES.txt

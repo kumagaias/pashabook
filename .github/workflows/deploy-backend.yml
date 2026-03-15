@@ -1,0 +1,97 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: pashabook-dev
+  GCP_REGION: asia-northeast1
+  ARTIFACT_REGISTRY_REPO: pashabook
+  SERVICE_NAME: pashabook-worker
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/backend:${{ github.sha }} \
+                       -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/backend:latest \
+                       backend/
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/backend:${{ github.sha }}
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/backend:latest
+
+      - name: Get infrastructure outputs
+        id: infra
+        run: |
+          # Get bucket names and queue name from GCP
+          UPLOADS_BUCKET="${{ env.GCP_PROJECT_ID }}-pashabook-uploads"
+          VIDEOS_BUCKET="${{ env.GCP_PROJECT_ID }}-pashabook-videos"
+          AUDIO_BUCKET="${{ env.GCP_PROJECT_ID }}-pashabook-audio"
+          IMAGES_BUCKET="${{ env.GCP_PROJECT_ID }}-pashabook-images"
+          ASSETS_BUCKET="${{ env.GCP_PROJECT_ID }}-pashabook-assets"
+          TASKS_QUEUE="dev-processing"
+          
+          # Get project number for Cloud Run URL
+          PROJECT_NUMBER=$(gcloud projects describe ${{ env.GCP_PROJECT_ID }} --format="value(projectNumber)")
+          CLOUD_RUN_URL="https://${{ env.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ env.GCP_REGION }}.run.app"
+          
+          echo "uploads_bucket=${UPLOADS_BUCKET}" >> $GITHUB_OUTPUT
+          echo "videos_bucket=${VIDEOS_BUCKET}" >> $GITHUB_OUTPUT
+          echo "audio_bucket=${AUDIO_BUCKET}" >> $GITHUB_OUTPUT
+          echo "images_bucket=${IMAGES_BUCKET}" >> $GITHUB_OUTPUT
+          echo "assets_bucket=${ASSETS_BUCKET}" >> $GITHUB_OUTPUT
+          echo "tasks_queue=${TASKS_QUEUE}" >> $GITHUB_OUTPUT
+          echo "cloud_run_url=${CLOUD_RUN_URL}" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY_REPO }}/backend:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}" \
+            --set-env-vars "GCP_REGION=${{ env.GCP_REGION }}" \
+            --set-env-vars "GCP_LOCATION=${{ env.GCP_REGION }}" \
+            --set-env-vars "STORAGE_BUCKET_UPLOADS=${{ steps.infra.outputs.uploads_bucket }}" \
+            --set-env-vars "STORAGE_BUCKET_VIDEOS=${{ steps.infra.outputs.videos_bucket }}" \
+            --set-env-vars "STORAGE_BUCKET_AUDIO=${{ steps.infra.outputs.audio_bucket }}" \
+            --set-env-vars "STORAGE_BUCKET_IMAGES=${{ steps.infra.outputs.images_bucket }}" \
+            --set-env-vars "TASKS_QUEUE=${{ steps.infra.outputs.tasks_queue }}" \
+            --set-env-vars "VERTEX_AI_LOCATION=us-central1" \
+            --set-env-vars "CLOUD_RUN_SERVICE_URL=${{ steps.infra.outputs.cloud_run_url }}" \
+            --set-env-vars "BGM_STORAGE_PATH=gs://${{ steps.infra.outputs.assets_bucket }}/bgm/"
+
+      - name: Show deployment URL
+        run: |
+          echo "Deployed to: $(gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.GCP_REGION }} --format 'value(status.url)')"

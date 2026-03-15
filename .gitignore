@@ -8,6 +8,9 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.hosting
+backend/.env
+mobile/.env
 
 # IDE
 .vscode/
@@ -44,8 +47,12 @@ coverage/
 # Terraform
 *.tfstate
 *.tfstate.backup
+*.tfstate.*.backup
 .terraform/
 .terraform.lock.hcl
+.terraform.tfstate.lock.info
+terraform.tfvars
+tfplan
 
 # Python
 __pycache__/

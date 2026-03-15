@@ -48,7 +48,7 @@ export async function simulateGeneration(
   book: Storybook,
   onUpdate: (book: Storybook) => void
 ): Promise<Storybook> {
-  let current = { ...book, status: "processing" as const };
+  let current: Storybook = { ...book, status: "processing" };
 
   for (let i = 0; i < STEPS.length; i++) {
     const step = STEPS[i];
@@ -75,7 +75,7 @@ export async function simulateGeneration(
     }
 
     if (step.step === "done") {
-      current.status = "done";
+      current = { ...current, status: "done" };
     }
 
     await saveStorybook(current);

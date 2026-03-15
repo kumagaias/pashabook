@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -15,10 +14,13 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.myapp"
+      "bundleIdentifier": "com.bonopo.pashabook",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.myapp",
+      "package": "com.bonopo.pashabook",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,9 +29,34 @@
       }
     },
     "web": {
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro",
+      "output": "static",
+      "name": "Pashabook",
+      "shortName": "Pashabook",
+      "description": "Create magical storybooks from your child's drawings",
+      "themeColor": "#FF6B6B",
+      "backgroundColor": "#FFF9F0",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "icons": [
+        {
+          "src": "./assets/images/icon.png",
+          "sizes": "1024x1024",
+          "type": "image/png",
+          "purpose": "any"
+        },
+        {
+          "src": "./assets/images/icon.png",
+          "sizes": "1024x1024",
+          "type": "image/png",
+          "purpose": "maskable"
+        }
+      ]
     },
     "plugins": [
+      "expo-dev-client",
       [
         "expo-router",
         {
@@ -37,11 +64,35 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#FF6B6B",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a422b0d3-0d13-4f41-946a-1866e9d51dcb"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "router": {
+        "origin": "https://replit.com/"
+      },
+      "eas": {
+        "projectId": "a422b0d3-0d13-4f41-946a-1866e9d51dcb"
+      }
+    },
+    "owner": "bonopo"
   }
 }

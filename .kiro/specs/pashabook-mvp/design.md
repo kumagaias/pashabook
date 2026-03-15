@@ -2,7 +2,7 @@
 
 ## Overview
 
-Pashabook is an AI-powered storybook generation system that transforms children's drawings into animated video storybooks with narration. The system leverages Google Cloud's AI services (Gemini 2.0 Flash, Imagen 3, Veo 3.1 Fast, Cloud TTS) to analyze drawings, generate age-appropriate stories, create consistent illustrations, produce animations, and compose final videos.
+Pashabook is an AI-powered storybook generation system that transforms children's drawings into animated video storybooks with narration. The system leverages Google Cloud's AI services (Gemini 2.5 Flash Image, Imagen 3, Veo 3.1 Fast, Cloud TTS) to analyze drawings, generate age-appropriate stories, create consistent illustrations, produce animations, and compose final videos.
 
 The MVP targets the Gemini Live Agent Challenge hackathon with a focus on rapid generation (under 3 minutes), bilingual support (Japanese/English), and a clean user experience. The system uses a serverless architecture on Google Cloud Platform with asynchronous job processing to handle the multi-stage generation pipeline.
 
@@ -55,25 +55,39 @@ The MVP targets the Gemini Live Agent Challenge hackathon with a focus on rapid 
 ┌─────────────────────────────────────────┐
 │      Cloud Run (Processing Worker)      │
 │  ┌────────────────────────────────┐    │
-│  │  1. Image Analysis (Gemini)    │    │
+│  │  1. Image Analysis              │    │
+│  │     (Gemini 2.5 Flash Image)   │    │
 │  │     - Identifies climax        │    │
 │  │       indicators               │    │
-│  │  2. Story Generation (Gemini)  │    │
+│  │                                │    │
+│  │  2. Story + Illustration Gen   │    │
+│  │     (Gemini 2.5 Flash Image)   │    │
+│  │     - Interleaved output       │    │
 │  │     - Selects 1-2 highlight    │    │
 │  │       pages using climax       │    │
-│  │       indicators               │    │
+│  │     - JSON structured output   │    │
+│  │     - Estimates audio durations│    │
 │  │                                │    │
-│  │  3. PARALLEL EXECUTION:        │    │
-│  │     ├─ Narration (Cloud TTS)   │    │
-│  │     │  per-page, determines    │    │
-│  │     │  clip durations          │    │
-│  │     └─ Illustration (Imagen 3) │    │
-│  │        all pages in parallel   │    │
+│  │  3. Parallel Execution:        │    │
+│  │     a) Narration Generation    │    │
+│  │        (Cloud TTS)             │    │
+│  │        - Character voices      │    │
+│  │        - Actual durations      │    │
+│  │        - 0.3s silence padding  │    │
+│  │     b) Animation Generation    │    │
+│  │        (FFmpeg/Veo 3.1 Fast)   │    │
+│  │        - Uses estimated        │    │
+│  │          durations             │    │
+│  │        - Ken Burns/Veo         │    │
 │  │                                │    │
-│  │  4. Animation (FFmpeg/Veo)     │    │
-│  │     - Uses narration durations │    │
-│  │  5. Video Composition (FFmpeg) │    │
-│  │     - Syncs clips with audio   │    │
+│  │  4. Video Composition          │    │
+│  │     (FFmpeg)                   │    │
+│  │     - Syncs with actual        │    │
+│  │       durations                │    │
+│  │     - Adjusts clip lengths     │    │
+│  │     - Adds BGM from Cloud      │    │
+│  │       Storage                  │    │
+│  │     - Sends FCM notification   │    │
 │  └────────────────────────────────┘    │
 └──────┬──────────────────────────────────┘
        │
@@ -137,7 +151,8 @@ The MVP targets the Gemini Live Agent Challenge hackathon with a focus on rapid 
 - **Frontend**: React Native (Expo), TypeScript
 - **Backend**: Node.js 20, Cloud Functions (2nd gen), Cloud Run
 - **Authentication**: Firebase Authentication (Email/Password)
-- **AI Services**: Gemini 2.0 Flash, Imagen 3, Veo 3.1 Fast, Cloud TTS
+- **Push Notifications**: Firebase Cloud Messaging (FCM) for job completion notifications
+- **AI Services**: Gemini 2.5 Flash Image (analysis, story + illustrations via interleaved output), Imagen 3 (fallback), Veo 3.1 Fast (highlight animations), Cloud TTS (narration with character-specific voices)
 - **Storage**: Firestore, Cloud Storage, AsyncStorage (mobile local storage)
 - **Queue**: Cloud Tasks
 - **Video Processing**: FFmpeg
@@ -176,6 +191,56 @@ interface UserProfile {
 - Job records include `userId` field for ownership verification
 - Library data stored locally (AsyncStorage + FileSystem) per user session
 
+## Push Notification Architecture
+
+### Firebase Cloud Messaging (FCM) Integration
+
+**Notification Flow:**
+1. Mobile app registers for push notifications on app launch
+2. FCM token obtained from Firebase SDK
+3. Token stored in Firestore `/users/{userId}` collection (fcmToken field)
+4. When job completes, Cloud Run worker sends notification via FCM Admin SDK
+5. Mobile app receives notification and displays to user
+6. User taps notification → app opens and navigates to preview screen
+
+**FCM Token Management:**
+- Token stored in UserProfile document in Firestore
+- Token refreshed automatically by Firebase SDK
+- Token updated in Firestore on refresh
+- Stale tokens handled gracefully (FCM returns error, token removed from Firestore)
+
+**Notification Payload:**
+```typescript
+{
+  notification: {
+    title: "Your storybook is ready!",
+    body: "Tap to view your animated storybook"
+  },
+  data: {
+    jobId: string,
+    type: "job_complete"
+  },
+  token: string // User's FCM token from Firestore
+}
+```
+
+**User Profile Schema Update:**
+```typescript
+interface UserProfile {
+  userId: string // Firebase UID
+  name: string
+  email: string
+  fcmToken?: string // FCM device token for push notifications
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+```
+
+**Error Handling:**
+- Invalid token: Remove from Firestore, user re-registers on next app launch
+- Network error: Retry up to 3 times with exponential backoff
+- User has no token: Skip notification (user may have disabled notifications)
+
 ## Components and Interfaces
 
 ### Frontend Components
@@ -203,7 +268,7 @@ interface UploadSectionProps {
 ```
 
 #### ProcessingSection Component
-Displays generation progress with status updates.
+Displays generation progress with status updates and queue position.
 
 ```javascript
 interface ProcessingSectionProps {
@@ -211,6 +276,12 @@ interface ProcessingSectionProps {
   language: 'ja' | 'en'
 }
 ```
+
+**Queue Position Display:**
+- When `queuePosition > 0`, display: "You are #N in queue" (or Japanese equivalent)
+- When `queuePosition === 0` or undefined, display current processing stage message
+- Update queue position on each status poll (every 2 seconds)
+- Estimated wait time: ~3 minutes per position (based on average job completion time)
 
 #### PreviewSection Component
 Shows completed video with title editing and save/download options.
@@ -273,9 +344,10 @@ Returns current job status and progress.
   jobId: string
   status: 'pending' | 'processing' | 'done' | 'error'
   progress: {
-    stage: 'analyzing' | 'generating' | 'illustrating' | 'animating' | 'narrating' | 'composing'
+    stage: 'analyzing' | 'generating' | 'narrating' | 'animating' | 'composing'
     percentage: number (0-100)
   }
+  queuePosition?: number // Present when status is 'pending' and position > 0
   result?: {
     title: string
     videoUrl: string
@@ -286,7 +358,15 @@ Returns current job status and progress.
 }
 ```
 
-**Note on Parallel Stages:** During parallel execution of narration and illustration generation, the system reports the stage of whichever process started first. The stage transitions to 'animating' only after both narration and illustration are complete.
+**Note on Processing Order:** The pipeline follows an optimized order for performance:
+1. 'analyzing' - Image analysis (Gemini 2.5 Flash Image)
+2. 'generating' - Story + illustration generation with duration estimation (Gemini 2.5 Flash Image interleaved output)
+3. 'narrating' and 'animating' - Parallel execution:
+   - Narration generation with character voices (Cloud TTS) produces actual durations
+   - Animation generation (FFmpeg/Veo 3.1 Fast) uses estimated durations from step 2
+4. 'composing' - Video composition with duration adjustment, audio mixing, BGM, and FCM notification (FFmpeg)
+
+Parallel execution of narration and animation reduces total pipeline time by 30-60 seconds. Video_Compositor performs final synchronization using actual narration durations, adjusting animation clip lengths if needed.
 
 #### GET /api/video/:jobId
 Generates signed URL for video access.
@@ -338,7 +418,7 @@ interface CharacterDescription {
 ```
 
 #### StoryGenerator
-Generates story content using Gemini 2.0 Flash.
+Generates story content with interleaved illustrations and duration estimation using Gemini 2.5 Flash Image.
 
 ```typescript
 interface StoryGenerator {
@@ -352,14 +432,40 @@ interface Story {
 
 interface StoryPage {
   pageNumber: number
-  narrationText: string // 20-100 words
-  imagePrompt: string
+  narrationText: string // Deprecated: kept for backward compatibility
+  narrationSegments: NarrationSegment[] // JSON structured format for character voices
+  imagePrompt: string // Prompt for illustration generation
   animationMode: 'standard' | 'highlight'
+  estimatedDuration: number // seconds, calculated from word count
+}
+
+interface NarrationSegment {
+  text: string
+  speaker: 'narrator' | 'protagonist' | 'supporting_character'
 }
 ```
 
+**Implementation Note:** Uses Gemini 2.5 Flash Image (gemini-2.5-flash-image) with Response_Modality set to ["TEXT", "IMAGE"] for interleaved output. This generates both story text and illustrations in a single API call, ensuring coherence between content and visuals. JSON structured output prevents parse errors in character voice separation. 
+
+Duration estimation uses language-specific formulas for improved accuracy:
+- Japanese: character count / 250 characters-per-minute (slower pacing for children aged 3-8, allows time to view illustrations)
+- English: word count / 180 words-per-minute
+
+Estimated durations enable parallel execution of narration and animation generation.
+
+**Fallback to Imagen 3:** The system falls back to Imagen 3 for illustration generation when Gemini 2.5 Flash Image interleaved output fails. Fallback is triggered by any of the following conditions:
+1. **API Error Response**: Gemini API returns 4xx or 5xx error status
+2. **Request Timeout**: Gemini request exceeds 60-second timeout threshold
+3. **Zero Images Returned**: Interleaved output contains text but no image data
+4. **Partial Image Failure**: Some pages have images but others are missing (incomplete generation)
+5. **Image Validation Failure**: Returned images fail dimension or format validation (not 1280x720, not JPEG/PNG)
+
+When fallback occurs, the system uses the story text from Gemini (if available) and generates all page illustrations via Imagen 3 using the image prompts from the story generation step.
+
+**Risk Note:** Gemini 2.5 Flash Image's image generation capability is currently experimental. Monitor fallback frequency to Imagen 3 during development. If fallback rate exceeds 20%, consider making Imagen 3 the primary method.
+
 #### IllustrationGenerator
-Creates page illustrations using Imagen 3.
+Creates page illustrations using Imagen 3 (fallback only).
 
 ```typescript
 interface IllustrationGenerator {
@@ -374,19 +480,21 @@ interface Illustration {
 }
 ```
 
+**Implementation Note:** This is a fallback mechanism used only when Gemini 2.5 Flash Image interleaved generation fails. Primary illustration generation is handled by StoryGenerator using interleaved output.
+
 #### AnimationEngine
-Creates video animations using FFmpeg or Veo 3.1 Fast.
+Creates video animations using FFmpeg or Veo 3.1 Fast with estimated durations.
 
 ```typescript
 interface AnimationEngine {
-  animateStandardPage(illustration: Illustration, narrationDuration: number): Promise<VideoClip>
-  animateHighlightPage(illustration: Illustration, prompt: string, narrationDuration: number): Promise<VideoClip>
+  animateStandardPage(illustration: Illustration, estimatedDuration: number): Promise<VideoClip>
+  animateHighlightPage(illustration: Illustration, prompt: string, estimatedDuration: number): Promise<VideoClip>
 }
 
 interface VideoClip {
   pageNumber: number
   videoUrl: string // Cloud Storage URL
-  duration: number // seconds, matches narration duration
+  duration: number // seconds, matches estimated duration
   width: 1280
   height: 720
 }
@@ -397,31 +505,75 @@ interface KenBurnsParams {
 }
 ```
 
+**Implementation Note:** Uses estimated durations from Story_Generator to enable parallel execution with Narration_Generator. Video_Compositor performs final synchronization using actual narration durations.
+
 #### NarrationGenerator
-Creates audio narration using Cloud TTS.
+Creates audio narration with character-specific voices using Cloud TTS, producing actual durations.
 
 ```typescript
 interface NarrationGenerator {
-  generatePerPage(pageText: string, language: string): Promise<PageNarration>
+  generatePerPage(
+    narrationSegments: NarrationSegment[], 
+    language: string,
+    characterVoiceMap: CharacterVoiceMap
+  ): Promise<PageNarration>
   generateAll(pages: StoryPage[], language: string): Promise<PageNarration[]>
 }
 
 interface PageNarration {
   pageNumber: number
-  audioUrl: string // Cloud Storage URL
-  duration: number // seconds
+  audioSegments: AudioSegment[] // Separate audio for each character
+  duration: number // Total duration in seconds (sum of all segments, actual duration)
   language: 'ja' | 'en'
+}
+
+interface AudioSegment {
+  audioUrl: string // Cloud Storage URL
+  speaker: 'narrator' | 'protagonist' | 'supporting_character'
+  duration: number // seconds
+  startTime: number // seconds, relative to page start
+}
+
+interface CharacterVoiceMap {
+  [characterName: string]: VoiceConfig // e.g., {"protagonist": {...}, "narrator": {...}}
+}
+
+interface VoiceConfig {
+  voiceName: string // e.g., 'ja-JP-Wavenet-B'
+  pitch: number // -20.0 to 20.0
+  speakingRate: number // 0.25 to 4.0
 }
 ```
 
-**Note:** Narration is generated per-page to determine individual clip durations before animation generation. The `generateAll` method processes pages in parallel for efficiency.
+**Implementation Note:** Narration is generated per-page with character-specific voices. Each character type (narrator, protagonist, supporting characters) receives a distinct TTS voice configuration. Audio segments are generated separately and will be mixed by VideoCompositor. The `generateAll` method processes pages in parallel for efficiency. The total duration per page (actual duration from TTS) is used by Video_Compositor for final synchronization with animation clips.
+
+**Character Voice Consistency:** To maintain consistent voice assignment across all pages, the system implements a character-to-voice mapping mechanism:
+
+1. **Mapping Creation**: On first encounter of each character (during page 1 narration generation), the system assigns a TTS voice ID and stores the mapping in the Job record's `characterVoiceMap` field
+2. **Mapping Structure**: `{"protagonist": "ja-JP-Wavenet-B", "supporting_character_1": "ja-JP-Wavenet-C", "narrator": "ja-JP-Wavenet-A"}`
+3. **Mapping Persistence**: The mapping is stored in Firestore and retrieved for each subsequent page's narration generation
+4. **Character Identification**: Character names from Image_Analyzer are used as keys in the mapping dictionary
+5. **Lookup Process**: Before generating audio for any character segment, Narration_Generator checks the `characterVoiceMap` for an existing voice assignment. If found, use that voice ID. If not found (new character), assign a new voice ID and update the mapping in Firestore.
+
+Example flow:
+- Page 1: "protagonist" appears → assign ja-JP-Wavenet-B → store in Job.characterVoiceMap
+- Page 3: "protagonist" appears → lookup Job.characterVoiceMap → retrieve ja-JP-Wavenet-B → use same voice
+- Page 5: "protagonist" appears → lookup Job.characterVoiceMap → retrieve ja-JP-Wavenet-B → use same voice
+
+This ensures characters like "くまのプーさん" (Winnie the Pooh) use the same TTS voice consistently across all pages, maintaining character voice identity throughout the storybook.
 
 #### VideoCompositor
-Combines clips and audio using FFmpeg.
+Combines clips, character audio tracks, and BGM using FFmpeg with duration adjustment and FCM notification.
 
 ```typescript
 interface VideoCompositor {
-  compose(clips: VideoClip[], pageNarrations: PageNarration[]): Promise<FinalVideo>
+  compose(
+    clips: VideoClip[], 
+    pageNarrations: PageNarration[],
+    emotionalTone: string,
+    userId: string,
+    fcmToken: string
+  ): Promise<FinalVideo>
 }
 
 interface FinalVideo {
@@ -433,7 +585,51 @@ interface FinalVideo {
 }
 ```
 
-**Note:** The compositor synchronizes each video clip with its corresponding page narration audio.
+**Implementation Note:** The compositor:
+1. Synchronizes each video clip with actual narration duration from PageNarration
+2. Adjusts clip duration if estimated duration differs from actual duration (adds static frames at end or trims excess)
+3. Inserts 0.3-second silence padding between narrator segments and character dialogue segments for natural pacing (prevents audio from feeling rushed or overlapping)
+4. Applies 50ms crossfade transitions between character voice segments (within character dialogue only, not between narrator and character segments)
+5. Applies 0.5-second crossfade transitions between page clips
+6. Selects BGM track based on emotional tone (bright, adventure, sad, calm) from Cloud Storage
+   - BGM path configured via environment variable: `BGM_STORAGE_PATH` (default: `gs://pashabook-assets/bgm/`)
+   - Filenames: `bright.mp3`, `adventure.mp3`, `sad.mp3`, `calm.mp3`
+7. Mixes BGM at 20-30% of narration volume with 1-second fade-in/out
+8. Sends FCM push notification to user's device when composition completes
+
+The 0.3-second silence padding creates natural rhythm similar to human read-aloud, while the 50ms crossfade smooths voice changes within character dialogue.
+
+**Duration Adjustment Tolerance:** The system tolerates duration differences up to ±3 seconds between estimated and actual durations. Within this range:
+- Small differences (< 1 second): Minimal visual impact, Ken Burns effect continues smoothly
+- Medium differences (1-3 seconds): Acceptable quality, static frames added at end or slight speed adjustment
+- Large differences (> 3 seconds): May indicate estimation error; logged as warning for monitoring
+
+If duration difference exceeds 3 seconds, the system logs a warning but continues processing. This threshold balances performance optimization (parallel execution) with video quality. The 250 characters-per-minute formula for Japanese typically produces estimates within ±1 second of actual duration.
+
+**Duration Adjustment Implementation Details:**
+
+When actual narration duration differs from estimated animation duration:
+
+1. **Narration shorter than animation (need to shorten video)**:
+   - **Preferred approach**: Use FFmpeg `setpts` filter to adjust playback speed by ±10% maximum
+   - Example: If animation is 10s but narration is 9s, speed up video to 1.11x (10s / 9s = 1.11)
+   - This preserves Ken Burns effect smoothness without abrupt cuts
+   - **Fallback**: If speed adjustment exceeds ±10%, trim excess frames from end and add 0.5s freeze frame to soften transition
+
+2. **Narration longer than animation (need to extend video)**:
+   - Add static frames at end (freeze last frame) to match narration duration
+   - Apply 0.3s fade-out on final frame for smooth ending
+
+3. **Speed adjustment formula**:
+   ```
+   speedFactor = estimatedDuration / actualDuration
+   if (speedFactor > 0.9 && speedFactor < 1.1):
+     use setpts filter with speedFactor
+   else:
+     use static frame extension/trimming
+   ```
+
+This approach prevents jarring mid-zoom cuts while maintaining visual quality.
 
 ## Data Models
 
@@ -452,16 +648,20 @@ interface Job {
   uploadedImageUrl?: string
   illustrationUrls?: string[]
   animationClipUrls?: string[]
-  narrationAudioUrl?: string
+  narrationAudioUrls?: string[] // Array of URLs for all audio segments across all pages
   finalVideoUrl?: string
   
   // Generation results
   analysis?: AnalysisResult
   story?: Story
+  estimatedDurations?: number[] // Per-page estimated durations from Story_Generator
+  actualDurations?: number[] // Per-page actual durations from Narration_Generator
+  characterVoiceMap?: CharacterVoiceMap // Character-to-voice mapping for consistent voices
   
   // Progress tracking
-  currentStage?: 'analyzing' | 'generating' | 'illustrating' | 'animating' | 'narrating' | 'composing'
+  currentStage?: 'analyzing' | 'generating' | 'animating' | 'narrating' | 'composing'
   progressPercentage?: number
+  queuePosition?: number // Position in Cloud Tasks queue (only when status is 'pending')
   
   // Error handling
   error?: string
@@ -469,7 +669,17 @@ interface Job {
   // Timestamps
   createdAt: Timestamp
   updatedAt: Timestamp
-  ttl: Timestamp // 24 hours from creation
+  ttl: Timestamp // 23 hours from creation (1 hour before Cloud Storage deletion)
+}
+
+interface CharacterVoiceMap {
+  [characterName: string]: VoiceConfig // e.g., {"protagonist": {...}, "narrator": {...}}
+}
+
+interface VoiceConfig {
+  voiceName: string // e.g., 'ja-JP-Wavenet-B'
+  pitch: number // -20.0 to 20.0
+  speakingRate: number // 0.25 to 4.0
 }
 ```
 
@@ -477,6 +687,8 @@ interface Job {
 - `jobId` (primary key)
 - `userId` (for user's job queries)
 - `ttl` (for cleanup)
+
+**Implementation Note:** Firestore TTL is set to 23 hours (1 hour shorter than Cloud Storage lifecycle policy) to prevent "metadata exists but video deleted" inconsistent states. The `estimatedDurations` field stores duration estimates from Story_Generator for parallel processing. The `actualDurations` field stores actual narration durations from Narration_Generator for final video synchronization. The `queuePosition` field is calculated when status is 'pending' and there are 3 or more active jobs in the Cloud Tasks queue. The 'illustrating' stage is removed from `currentStage` enum as illustration generation is now part of the 'generating' stage (interleaved output).
 
 ### Local Storage Schema
 
@@ -503,6 +715,11 @@ interface LibraryBook {
 
 ```
 gs://pashabook-assets/
+  bgm/
+    bright.mp3
+    adventure.mp3
+    sad.mp3
+    calm.mp3
   jobs/
     {jobId}/
       uploaded/
@@ -516,13 +733,19 @@ gs://pashabook-assets/
         page-2.mp4
         ...
       narration/
-        audio.mp3
+        page-1-narrator.mp3
+        page-1-protagonist.mp3
+        page-2-narrator.mp3
+        page-2-protagonist.mp3
+        ...
       final/
         video.mp4
 ```
 
 **Lifecycle Policy:**
 - Delete all objects after 24 hours
+
+**Implementation Note:** Cloud Storage lifecycle policy is set to 24 hours. Firestore TTL is set to 23 hours (1 hour shorter) to ensure Job records are deleted before or simultaneously with their associated Cloud Storage objects, preventing "metadata exists but video deleted" inconsistent states.
 
 ## Correctness Properties
 
@@ -546,257 +769,259 @@ gs://pashabook-assets/
 
 **Validates: Requirements 4.9**
 
-### Property 4: Analysis Persistence
+### Property 4: Story Duration Estimation
+
+*For any* generated story page, the estimated duration should be calculated using language-specific formulas:
+- Japanese: (character count / 250 characters-per-minute)
+- English: (word count / 180 words-per-minute)
+
+**Validates: Requirements 4.18-4.19**
+
+### Property 5: Analysis Persistence
 
 *For any* completed image analysis, querying the job record should return the same analysis results.
 
 **Validates: Requirements 3.7**
 
-### Property 5: Story Page Count Constraint
+### Property 6: Story Page Count Constraint
 
 *For any* generated story, the number of pages should be between 5 and 6 inclusive.
 
-**Validates: Requirements 4.1**
+**Validates: Requirements 4.3**
 
-### Property 6: Character Description Incorporation
+### Property 7: Character Description Incorporation
 
 *For any* generated story, all character names from the analysis should appear in at least one page's narration text or image prompt.
 
-**Validates: Requirements 4.3**
+**Validates: Requirements 4.5**
 
-### Property 7: Style Description Incorporation
+### Property 8: Style Description Incorporation
 
 *For any* generated story, the style description from the analysis should appear in all image prompts.
 
-**Validates: Requirements 4.4**
+**Validates: Requirements 4.6**
 
-### Property 8: Story Title Existence
+### Property 9: Story Title Existence
 
 *For any* generated story, the title field should be non-empty.
 
-**Validates: Requirements 4.6**
+**Validates: Requirements 4.8**
 
-### Property 9: Narration Word Count Constraint
+### Property 10: Narration Word Count Constraint
 
 *For any* story page, the narration text should contain between 20 and 100 words inclusive.
 
-**Validates: Requirements 4.7**
+**Validates: Requirements 4.9**
 
-### Property 10: Image Prompt Completeness
+### Property 11: Image Prompt Completeness
 
 *For any* generated story, every page should have a non-empty image prompt.
 
-**Validates: Requirements 4.8**
+**Validates: Requirements 4.10**
 
-### Property 11: Animation Mode Validity
+### Property 12: Animation Mode Validity
 
 *For any* story page, the animation mode should be either "standard" or "highlight".
 
-**Validates: Requirements 4.9**
+**Validates: Requirements 4.12**
 
-### Property 12: Language Selection for Story Content
+### Property 13: Language Selection for Story Content
 
 *For any* story generation request with language parameter L, the generated story content should be detected as language L.
 
-**Validates: Requirements 4.10, 4.11**
+**Validates: Requirements 4.13, 4.14**
 
-### Property 13: Illustration Count Matches Page Count
+### Property 14: Illustration Count Matches Page Count
 
 *For any* generated story with N pages, the illustration generator should produce exactly N illustrations.
 
-**Validates: Requirements 5.1**
+**Validates: Requirements 5.3**
 
-### Property 14: Style in Illustration Prompts
+### Property 15: Style in Illustration Prompts
 
 *For any* illustration generation, all image prompts should contain the style description from the analysis.
 
-**Validates: Requirements 5.2**
+**Validates: Requirements 5.4**
 
-### Property 15: Characters in Illustration Prompts
+### Property 16: Characters in Illustration Prompts
 
 *For any* illustration generation, all image prompts should contain character descriptions from the analysis.
 
-**Validates: Requirements 5.3**
+**Validates: Requirements 5.5**
 
-### Property 16: Illustration Resolution
+### Property 17: Illustration Resolution
 
 *For any* generated illustration, the image dimensions should be exactly 1280x720 pixels.
 
 **Validates: Requirements 5.5**
 
-### Property 17: Illustration Storage
+### Property 18: Illustration Storage
 
 *For any* generated illustration, the image should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 5.6**
 
-### Property 18: Illustration URLs in Job Record
+### Property 19: Illustration URLs in Job Record
 
 *For any* completed illustration generation, the job record should contain URLs for all generated illustrations.
 
 **Validates: Requirements 5.7**
 
-### Property 19: Standard Page Animation Completeness
+### Property 20: Standard Page Animation Completeness
 
 *For any* story with N standard pages, the animation engine should produce exactly N standard page animations.
 
 **Validates: Requirements 6.1**
 
-### Property 20: Zoom Direction Validity
+### Property 21: Zoom Direction Validity
 
 *For any* standard page animation, the zoom direction should be either "in" or "out".
 
 **Validates: Requirements 6.3**
 
-### Property 21: Pan Direction Validity
+### Property 22: Pan Direction Validity
 
 *For any* standard page animation, the pan direction should be one of "left", "right", or "none".
 
 **Validates: Requirements 6.4**
 
-### Property 22: Standard Page Clip Duration
+### Property 23: Standard Page Clip Duration
 
-*For any* standard page animation clip, the duration should match the narration audio duration for that page (±0.1 seconds tolerance).
+*For any* standard page animation clip, the duration should match the estimated duration for that page (±0.1 seconds tolerance).
 
-**Validates: Requirements 6.5**
+**Validates: Requirements 6.6**
 
-### Property 23: Animation Clip Storage
+### Property 24: Animation Clip Storage
 
 *For any* generated animation clip, the video should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 6.7**
 
-### Property 24: Animation URLs in Job Record
+### Property 25: Animation URLs in Job Record
 
 *For any* completed animation generation, the job record should contain URLs for all animation clips.
 
 **Validates: Requirements 6.8**
 
-### Property 25: Highlight Page Animation Completeness
+### Property 26: Highlight Page Animation Completeness
 
 *For any* story with M highlight pages, the animation engine should produce exactly M highlight page animations.
 
 **Validates: Requirements 7.1**
 
-### Property 26: Highlight Page Clip Duration
+### Property 27: Highlight Page Clip Duration
 
-*For any* highlight page animation clip, the duration should match the narration audio duration for that page (±0.1 seconds tolerance).
+*For any* highlight page animation clip, the duration should match the estimated duration for that page (±0.1 seconds tolerance).
 
 **Validates: Requirements 7.2**
 
-### Property 27: Highlight Clip Storage
+### Property 28: Highlight Clip Storage
 
 *For any* generated highlight page clip, the video should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 7.6**
 
-### Property 28: Highlight URLs in Job Record
+### Property 29: Highlight URLs in Job Record
 
 *For any* completed highlight page generation, the job record should contain URLs for all highlight page clips.
 
 **Validates: Requirements 7.7**
 
-### Property 29: Narration Generation
+### Property 30: Narration Generation
 
 *For any* completed story generation, the narration generator should produce a non-empty audio file.
 
 **Validates: Requirements 8.1**
 
-### Property 30: Narration Storage
+### Property 31: Narration Storage
 
 *For any* generated narration audio, the file should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 8.5**
 
-### Property 31: Narration URL in Job Record
+### Property 32: Narration URL in Job Record
 
 *For any* completed narration generation, the job record should contain the narration audio URL.
 
 **Validates: Requirements 8.6**
 
-### Property 32: Video Clip Count
+### Property 33: Video Clip Count
 
 *For any* video composition with N pages, the final video should contain exactly N clips.
 
 **Validates: Requirements 9.1**
 
-### Property 33: Audio-Video Synchronization
+### Property 34: Audio-Video Synchronization
 
 *For any* final video, the narration audio duration should match the video duration (±0.5 seconds tolerance).
 
 **Validates: Requirements 9.3**
 
-### Property 34: Final Video Resolution
+### Property 35: Final Video Resolution
 
 *For any* final video, the dimensions should be exactly 1280x720 pixels.
 
 **Validates: Requirements 9.4**
 
-### Property 35: Final Video Format
+### Property 36: Final Video Format
 
 *For any* final video, the file format should be MP4.
 
 **Validates: Requirements 9.5**
 
-### Property 36: Final Video Storage
+### Property 37: Final Video Storage
 
 *For any* generated final video, the file should be accessible via the stored Cloud Storage URL.
 
 **Validates: Requirements 9.6**
 
-### Property 37: Job Status Update on Completion
+### Property 38: Job Status Update on Completion
 
 *For any* completed video composition, the job status should be "done" and the job record should contain the final video URL.
 
 **Validates: Requirements 9.7**
 
-### Property 38: Job Status Transition to Processing
+### Property 39: Job Status Transition to Processing
 
 *For any* job that begins generation, the status should transition from "pending" to "processing".
 
 **Validates: Requirements 10.1**
 
-### Property 39: Job Status Transition to Done
+### Property 40: Job Status Transition to Done
 
 *For any* job that completes successfully, the status should transition to "done".
 
 **Validates: Requirements 10.2**
 
-### Property 40: Job Status Transition to Error
+### Property 41: Job Status Transition to Error
 
 *For any* job where a component fails, the status should transition to "error".
 
 **Validates: Requirements 10.3**
 
-### Property 41: Error Message Storage
+### Property 42: Error Message Storage
 
 *For any* job with status "error", the job record should contain a non-empty error message.
 
 **Validates: Requirements 10.4**
 
-### Property 42: Timestamp Updates
+### Property 43: Timestamp Updates
 
 *For any* job status change, the updatedAt timestamp should be more recent than the previous updatedAt value.
 
 **Validates: Requirements 10.5**
 
-### Property 43: Job Query Round-Trip
+### Property 44: Job Query Round-Trip
 
 *For any* created job with ID J, querying the status endpoint with ID J should return a job record with the same ID.
 
 **Validates: Requirements 10.6**
 
-### Property 44: Signed URL Generation
+### Property 45: Signed URL Generation
 
 *For any* completed job, the video endpoint should return a signed URL that is accessible and valid for 24 hours.
 
 **Validates: Requirements 11.1**
-
-### Property 45: Download Link Availability
-
-*For any* completed job, the video endpoint should return a non-empty download URL.
-
-**Validates: Requirements 11.2**
 
 ### Property 46: Title Display with Video
 
@@ -828,95 +1053,125 @@ gs://pashabook-assets/
 
 **Validates: Requirements 12.5**
 
-### Property 51: Library Save Functionality
+### Property 52: Library Save Functionality
 
 *For any* completed storybook that is saved, the library should contain an entry for that storybook.
 
 **Validates: Requirements 13.1**
 
-### Property 52: Local Storage Persistence
+### Property 53: Local Storage Persistence
 
 *For any* saved storybook, the video file should be retrievable from the device's file system and metadata should be retrievable from AsyncStorage.
 
 **Validates: Requirements 13.2, 13.3, 13.6, 13.7**
 
-### Property 53: Library Display Completeness
+### Property 54: Library Display Completeness
 
 *For any* library with N saved storybooks, the library view should display exactly N storybook cards.
 
 **Validates: Requirements 13.4**
 
-### Property 54: Library Delete Functionality
+### Property 55: Library Delete Functionality
 
 *For any* storybook deleted from the library, the library should no longer contain that storybook.
 
 **Validates: Requirements 13.5**
 
-### Property 55: Saved Storybook Fields
+### Property 56: Saved Storybook Fields
 
 *For any* saved storybook, the stored data should include title, video file URI, thumbnail URI, and creation timestamp fields.
 
 **Validates: Requirements 13.7**
 
-### Property 56: Library Thumbnail Display
+### Property 57: Library Thumbnail Display
 
 *For any* storybook in the library view, a thumbnail image should be displayed.
 
 **Validates: Requirements 13.8**
 
-### Property 57: Default Title Display
+### Property 58: Default Title Display
 
 *For any* newly generated storybook, the preview should initially display the AI-generated title.
 
 **Validates: Requirements 14.1**
 
-### Property 58: Title Edit Functionality
+### Property 59: Title Edit Functionality
 
 *For any* storybook in preview, editing the title field should update the displayed title.
 
 **Validates: Requirements 14.2**
 
-### Property 59: Custom Title Persistence
+### Property 60: Custom Title Persistence
 
 *For any* edited title that is saved, reloading the storybook should display the custom title.
 
 **Validates: Requirements 14.3**
 
-### Property 60: Custom Title in Library
+### Property 61: Custom Title in Library
 
 *For any* storybook with a custom title, the library view should display the custom title instead of the original.
 
 **Validates: Requirements 14.4**
 
-### Property 61: Upload Error Messages
+### Property 62: Upload Error Messages
 
 *For any* failed image upload, the UI should display a non-empty error message.
 
 **Validates: Requirements 17.1**
 
-### Property 62: Generation Error Messages
+### Property 63: Generation Error Messages
 
 *For any* failed generation, the UI should display a non-empty error message.
 
 **Validates: Requirements 17.2**
 
-### Property 63: Network Error Retry Option
+### Property 64: Network Error Retry Option
 
 *For any* network error, the UI should display a retry option.
 
 **Validates: Requirements 17.3**
 
-### Property 64: Error Logging
+### Property 65: Error Logging
 
 *For any* error that occurs, an entry should be created in Cloud Logging.
 
 **Validates: Requirements 17.4**
 
-### Property 65: Error Message Sanitization
+### Property 66: Error Message Sanitization
 
 *For any* error message displayed to users, the message should not contain internal implementation details (stack traces, file paths, database queries).
 
 **Validates: Requirements 17.5**
+
+### Property 67: Queue Position Calculation
+
+*For any* job in "pending" status when Cloud Tasks queue has 3 or more active jobs, the status endpoint should return a queuePosition value greater than 0.
+
+**Validates: Requirements 10.8, 10.9**
+
+### Property 68: FCM Notification on Completion
+
+*For any* job that transitions to "done" status, a push notification should be sent to the user's device via Firebase Cloud Messaging.
+
+**Validates: Requirements 11.6**
+
+### Property 69: Duration Estimation Storage
+
+*For any* completed story generation, the Job record should contain estimatedDurations array with one value per page.
+
+**Validates: Requirements 4.19**
+
+### Property 70: Actual Duration Storage
+
+*For any* completed narration generation, the Job record should contain actualDurations array with one value per page.
+
+**Validates: Requirements 8.12-8.13**
+
+### Property 71: Duration Adjustment in Composition
+
+*For any* video composition where animation clip duration differs from actual narration duration, the final video should have clips adjusted to match actual narration duration (±0.1 seconds tolerance).
+
+**Validates: Requirements 9.3**
 
 ## Error Handling
 
@@ -941,27 +1196,36 @@ gs://pashabook-assets/
 
 **AI Service Timeout**
 - Trigger: Gemini/Imagen/Veo request exceeds timeout
-- Action: Retry up to 3 times with exponential backoff
+- Action: Retry up to 3 times with exponential backoff (1s, 2s, 4s delays)
 - Fallback: For Veo timeout, use FFmpeg Ken Burns effect
 - Job Status: "error" if all retries fail
 - Message: "Generation timed out. Please try again."
 
 **AI Service Error**
-- Trigger: Gemini/Imagen/Veo returns error response
-- Action: Retry up to 3 times
+- Trigger: Gemini/Imagen/Veo returns error response (4xx/5xx)
+- Action: Retry up to 3 times with exponential backoff (1s, 2s, 4s delays)
 - Fallback: For Veo error, use FFmpeg Ken Burns effect
 - Job Status: "error" if all retries fail
 - Message: "AI service error. Please try again."
 
+**AI Service Rate Limit**
+- Trigger: Gemini API returns 429 (Too Many Requests) or quota exceeded error
+- Action: Exponential backoff with jitter (base delay: 2s, max delay: 32s)
+- Retry formula: `delay = min(baseDelay * 2^attempt + random(0, 1000ms), maxDelay)`
+- Max retries: 5 attempts
+- Job Status: "error" if all retries fail
+- Message: "Service temporarily unavailable. Please try again in a few minutes."
+- **Implementation Note**: Gemini 2.5 Flash Image interleaved output has large payloads. Rate limits may be hit on token throughput rather than RPM during hackathon peak usage. Exponential backoff with jitter prevents thundering herd problem.
+
 **Storage Error**
 - Trigger: Cloud Storage upload/download fails
-- Action: Retry up to 3 times
+- Action: Retry up to 3 times with exponential backoff (1s, 2s, 4s delays)
 - Job Status: "error" if all retries fail
 - Message: "Storage error. Please try again."
 
 **FFmpeg Error**
 - Trigger: Video processing fails
-- Action: Retry once
+- Action: Retry once with 2s delay
 - Job Status: "error" if retry fails
 - Message: "Video processing error. Please try again."
 
@@ -992,6 +1256,123 @@ User-facing error messages are sanitized to remove:
 - Database queries
 - API keys or credentials
 - Internal service names
+
+## Infrastructure Configuration
+
+### Cloud Run Configuration
+
+**CPU Boost Settings**
+- Enable CPU boost for FFmpeg-intensive operations
+- Configuration: `--cpu-boost` flag in Cloud Run deployment
+- Benefit: Reduces video composition time by 30-50% (from ~20s to ~10-15s)
+- Cost impact: Minimal for hackathon demo (pay-per-use, only during active processing)
+
+**Deployment Command:**
+```bash
+gcloud run deploy pashabook-worker \
+  --image gcr.io/PROJECT_ID/pashabook-worker \
+  --cpu-boost \
+  --cpu 2 \
+  --memory 4Gi \
+  --timeout 300s \
+  --region asia-northeast1
+```
+
+**Rationale:** FFmpeg video composition (merging clips, audio mixing, Ken Burns effects) is CPU-intensive. CPU boost allocates additional CPU during container startup and processing, significantly reducing composition time. This is especially important for hackathon demos where fast turnaround creates better user experience.
+
+### Cloud Storage CORS Configuration
+
+**CORS Policy for Mobile App Access**
+
+Mobile apps (React Native/Expo) require CORS headers to access Cloud Storage resources (videos, images) from signed URLs. Without CORS configuration, the app will encounter "CORS policy" errors when attempting to play videos or display images.
+
+**CORS Configuration File (`cors.json`):**
+```json
+[
+  {
+    "origin": ["*"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Length", "Content-Range"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+**Deployment Command:**
+```bash
+gsutil cors set cors.json gs://pashabook-assets
+```
+
+**Security Note:** Using `"origin": ["*"]` is acceptable for hackathon demo with public read access. For production, restrict to specific domains:
+```json
+"origin": ["https://pashabook.app", "exp://192.168.*"]
+```
+
+**Common CORS Errors Prevented:**
+- "Access to fetch at '...' from origin '...' has been blocked by CORS policy"
+- "No 'Access-Control-Allow-Origin' header is present on the requested resource"
+- Video player fails to load signed URL content
+
+### Mobile App Share Feature (Optional)
+
+**React Native Share API Integration**
+
+Add social sharing capability to allow users to share generated storybooks directly from the app to LINE, SNS, or other platforms.
+
+**Implementation:**
+```typescript
+import { Share } from 'react-native'
+
+const shareStorybook = async (videoUrl: string, title: string) => {
+  try {
+    await Share.share({
+      message: `Check out my storybook: ${title}`,
+      url: videoUrl, // iOS only
+      title: title
+    })
+  } catch (error) {
+    console.error('Share error:', error)
+  }
+}
+```
+
+**Platform Behavior:**
+- iOS: Shares video URL via native share sheet (Messages, Mail, LINE, etc.)
+- Android: Shares message text with URL (some apps may not support direct video sharing)
+
+**UX Enhancement:** Adds "Share" button next to "Download" button in PreviewSection component. This creates a compelling demo narrative: "子供の絵がこんなに簡単にシェアできる" (Children's drawings can be shared this easily).
+
+**Implementation Priority:** Optional for MVP. Can be added post-hackathon if time permits.
+
+### Environment Variables
+
+**Required Environment Variables for Cloud Run:**
+```bash
+GCP_PROJECT_ID=pashabook-dev
+GCP_REGION=asia-northeast1
+VERTEX_AI_LOCATION=asia-northeast1
+CLOUD_RUN_SERVICE_URL=https://pashabook-worker-xxx.run.app
+BGM_STORAGE_PATH=gs://pashabook-assets/bgm/
+FIREBASE_PROJECT_ID=pashabook-dev
+```
+
+**Deployment Configuration:**
+- Set via Terraform or `gcloud run deploy --set-env-vars`
+- Store sensitive values (API keys) in Secret Manager
+- Reference secrets via `--set-secrets` flag
+
+### Deployment Checklist
+
+Before deploying to production:
+- [ ] Cloud Run CPU boost enabled
+- [ ] Cloud Storage CORS policy configured
+- [ ] Environment variables set correctly
+- [ ] BGM files uploaded to Cloud Storage
+- [ ] Firestore indexes created
+- [ ] Cloud Tasks queue configured (max 3 concurrent)
+- [ ] Firebase Authentication enabled
+- [ ] FCM configured for push notifications
+- [ ] Lifecycle policies set (24-hour TTL)
 
 ## Testing Strategy
 

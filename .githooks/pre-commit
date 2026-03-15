@@ -1,0 +1,20 @@
+#!/bin/sh
+# Pre-commit hook: Run gitleaks before commit
+# Note: Unit tests are run in CI/CD pipeline due to Firestore emulator dependency
+
+echo "Running pre-commit checks..."
+
+# Run gitleaks
+echo "🔍 Running gitleaks..."
+gitleaks protect --staged --verbose
+if [ $? -ne 0 ]; then
+  echo "❌ Gitleaks found secrets. Commit blocked."
+  exit 1
+fi
+echo "✅ Gitleaks passed"
+
+# Note: Unit tests require Firestore emulator and are run in CI/CD pipeline
+echo "ℹ️  Unit tests will run in CI/CD pipeline (requires Firestore emulator)"
+
+echo "✅ All pre-commit checks passed!"
+exit 0

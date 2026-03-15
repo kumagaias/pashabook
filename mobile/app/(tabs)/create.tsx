@@ -11,21 +11,174 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import Colors from "@/constants/colors";
 import LanguagePicker from "@/components/LanguagePicker";
+import ProgressBar from "@/components/ProgressBar";
 import { createStorybook, saveStorybook } from "@/lib/storage";
+import { useLanguage } from "@/lib/language-context";
+import { useAuth } from "@/lib/auth-context";
+import { uploadImage } from "@/lib/api";
+
+// Helper function to compress images on web platform
+const compressImageForWeb = async (file: File): Promise<string> => {
+  console.log("Starting image compression for file:", file.name, file.size);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      console.log("File read complete, creating image");
+      const img = document.createElement("img") as HTMLImageElement;
+      
+      img.onload = () => {
+        console.log("Image loaded, dimensions:", img.width, "x", img.height);
+        try {
+          // Create canvas for compression
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Failed to get canvas context"));
+            return;
+          }
+
+          // Calculate new dimensions (max 1200px on longest side to ensure < 10MB)
+          const maxSize = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          console.log("Canvas dimensions:", width, "x", height);
+
+          // Draw and compress
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert to JPEG with 0.6 quality for smaller file size
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.6);
+          console.log("Compression complete, data URL length:", compressedDataUrl.length);
+          
+          // Estimate file size (base64 is ~33% larger than binary)
+          const estimatedSize = (compressedDataUrl.length * 0.75) / 1024 / 1024;
+          console.log("Estimated file size:", estimatedSize.toFixed(2), "MB");
+          
+          // If still too large, compress more aggressively
+          if (estimatedSize > 8) {
+            console.log("File still too large, compressing more aggressively");
+            const smallerDataUrl = canvas.toDataURL("image/jpeg", 0.5);
+            const smallerSize = (smallerDataUrl.length * 0.75) / 1024 / 1024;
+            console.log("Smaller file size:", smallerSize.toFixed(2), "MB");
+            resolve(smallerDataUrl);
+            return;
+          }
+          
+          // Clean up
+          img.remove();
+          
+          resolve(compressedDataUrl);
+        } catch (error) {
+          console.error("Error during compression:", error);
+          reject(error);
+        }
+      };
+      
+      img.onerror = (error) => {
+        console.error("Failed to load image:", error);
+        reject(new Error("Failed to load image"));
+      };
+      
+      // Set src to trigger load
+      const result = e.target?.result;
+      if (typeof result === "string") {
+        img.src = result;
+      } else {
+        reject(new Error("Invalid file data"));
+      }
+    };
+    
+    reader.onerror = (error) => {
+      console.error("Failed to read file:", error);
+      reject(new Error("Failed to read file"));
+    };
+    
+    reader.readAsDataURL(file);
+  });
+};
 
 export default function CreateScreen() {
   const insets = useSafeAreaInsets();
+  const { language, setLanguage } = useLanguage();
+  const { getIdToken } = useAuth();
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [language, setLanguage] = useState<"ja" | "en">("ja");
   const [isCreating, setIsCreating] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const handleLanguageChange = async (lang: "ja" | "en") => {
+    try {
+      await setLanguage(lang);
+    } catch (error) {
+      console.error("Failed to save language:", error);
+    }
+  };
 
   const pickImage = async (useCamera: boolean) => {
+    // Web platform: use HTML5 file input
+    if (Platform.OS === "web") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      if (useCamera) {
+        input.capture = "environment";
+      }
+      
+      input.onchange = async (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        const file = target.files?.[0];
+        if (file) {
+          console.log("File selected:", file.name, file.size, "bytes");
+          try {
+            // Compress image before displaying
+            const compressedDataUrl = await compressImageForWeb(file);
+            console.log("Compression complete, setting image URI, length:", compressedDataUrl.length);
+            
+            // Force state update
+            setImageUri(compressedDataUrl);
+            
+            console.log("Image URI set successfully");
+            
+            // Haptics doesn't work on web, skip it
+            try {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            } catch (e) {
+              // Ignore haptics errors on web
+            }
+          } catch (error) {
+            console.error("Image compression error:", error);
+            Alert.alert(
+              language === "ja" ? "エラー" : "Error",
+              language === "ja" 
+                ? "画像の処理に失敗しました。別の画像を選択してください。"
+                : "Failed to process image. Please select another image."
+            );
+          }
+        }
+      };
+      
+      input.click();
+      return;
+    }
+
+    // Native platform: use expo-image-picker
     if (useCamera) {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -59,7 +212,13 @@ export default function CreateScreen() {
         quality: 0.8,
       });
       if (!result.canceled) {
-        setImageUri(result.assets[0].uri);
+        // Convert to JPEG to ensure compatibility (handles HEIC from iPhone)
+        const manipulatedImage = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        setImageUri(manipulatedImage.uri);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } else {
@@ -68,7 +227,13 @@ export default function CreateScreen() {
         quality: 0.8,
       });
       if (!result.canceled) {
-        setImageUri(result.assets[0].uri);
+        // Convert to JPEG to ensure compatibility (handles HEIC from iPhone)
+        const manipulatedImage = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        setImageUri(manipulatedImage.uri);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     }
@@ -76,23 +241,90 @@ export default function CreateScreen() {
 
   const handleCreate = async () => {
     if (!imageUri) {
-      Alert.alert("Select Image", "Please upload a drawing first.");
+      Alert.alert(t.selectImage, t.selectImageMessage);
       return;
     }
 
     setIsCreating(true);
+    setUploadProgress(10);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
+      // Get authentication token
+      const idToken = await getIdToken();
+      if (!idToken) {
+        throw new Error("Authentication required. Please log in again.");
+      }
+
+      setUploadProgress(30);
+
+      // Upload image to backend API
+      const uploadResponse = await uploadImage(imageUri, language, idToken);
+
+      setUploadProgress(70);
+
+      // Create local storybook record with jobId from backend
       const book = createStorybook(imageUri, language);
+      book.id = uploadResponse.jobId; // Use backend jobId
+      book.status = "pending";
+      book.currentStep = "uploading";
+      book.progress = 0;
+
       await saveStorybook(book);
+
+      setUploadProgress(100);
+
+      // Navigate to progress screen
       router.push({ pathname: "/progress/[id]", params: { id: book.id } });
     } catch (error) {
-      Alert.alert("Error", "Failed to create storybook. Please try again.");
+      console.error("Create storybook error:", error);
+      
+      // Display user-friendly error message
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "Failed to create storybook. Please try again.";
+      
+      Alert.alert(t.uploadFailed, errorMessage);
     } finally {
       setIsCreating(false);
+      setUploadProgress(0);
     }
   };
+
+  const texts = {
+    ja: {
+      heading: "絵本を作る",
+      description: "お子様の絵をアップロードすると、魔法のアニメーション絵本に変身します",
+      drawing: "絵",
+      gallery: "ギャラリー",
+      galleryHint: "写真から選ぶ",
+      camera: "カメラ",
+      cameraHint: "写真を撮る",
+      storyLanguage: "ストーリーの言語",
+      creating: "作成中...",
+      generate: "絵本を作る",
+      selectImage: "画像を選択",
+      selectImageMessage: "まず絵をアップロードしてください。",
+      uploadFailed: "アップロード失敗",
+    },
+    en: {
+      heading: "Create Storybook",
+      description: "Upload your child's drawing and we'll transform it into a magical animated storybook",
+      drawing: "Drawing",
+      gallery: "Gallery",
+      galleryHint: "Select from photos",
+      camera: "Camera",
+      cameraHint: "Take a photo",
+      storyLanguage: "Story Language",
+      creating: "Creating...",
+      generate: "Generate Storybook",
+      selectImage: "Select Image",
+      selectImageMessage: "Please upload a drawing first.",
+      uploadFailed: "Upload Failed",
+    },
+  };
+
+  const t = texts[language];
 
   return (
     <View style={styles.screen}>
@@ -111,13 +343,13 @@ export default function CreateScreen() {
           },
         ]}
       >
-        <Text style={styles.heading}>Create Storybook</Text>
+        <Text style={styles.heading}>{t.heading}</Text>
         <Text style={styles.description}>
-          Upload your child's drawing and we'll transform it into a magical animated storybook
+          {t.description}
         </Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Drawing</Text>
+          <Text style={styles.sectionLabel}>{t.drawing}</Text>
           {imageUri ? (
             <View style={styles.previewContainer}>
               <Image
@@ -149,8 +381,8 @@ export default function CreateScreen() {
                     color={Colors.primary}
                   />
                 </View>
-                <Text style={styles.uploadLabel}>Gallery</Text>
-                <Text style={styles.uploadHint}>Select from photos</Text>
+                <Text style={styles.uploadLabel}>{t.gallery}</Text>
+                <Text style={styles.uploadHint}>{t.galleryHint}</Text>
               </Pressable>
               <Pressable
                 onPress={() => pickImage(true)}
@@ -166,16 +398,16 @@ export default function CreateScreen() {
                     color={Colors.accent}
                   />
                 </View>
-                <Text style={styles.uploadLabel}>Camera</Text>
-                <Text style={styles.uploadHint}>Take a photo</Text>
+                <Text style={styles.uploadLabel}>{t.camera}</Text>
+                <Text style={styles.uploadHint}>{t.cameraHint}</Text>
               </Pressable>
             </View>
           )}
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Story Language</Text>
-          <LanguagePicker selected={language} onSelect={setLanguage} />
+          <Text style={styles.sectionLabel}>{t.storyLanguage}</Text>
+          <LanguagePicker selected={language} onSelect={handleLanguageChange} />
         </View>
 
         <Pressable
@@ -208,10 +440,19 @@ export default function CreateScreen() {
                 (!imageUri || isCreating) && { color: Colors.textTertiary },
               ]}
             >
-              {isCreating ? "Creating..." : "Generate Storybook"}
+              {isCreating ? t.creating : t.generate}
             </Text>
           </LinearGradient>
         </Pressable>
+
+        {isCreating && uploadProgress > 0 && (
+          <View style={styles.uploadProgressSection}>
+            <ProgressBar progress={uploadProgress} height={8} />
+            <Text style={styles.uploadProgressText}>
+              {language === "ja" ? "アップロード中..." : "Uploading..."}
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -323,5 +564,15 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: "Inter_700Bold",
     color: "#fff",
+  },
+  uploadProgressSection: {
+    marginTop: 16,
+    gap: 8,
+  },
+  uploadProgressText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+    textAlign: "center",
   },
 });

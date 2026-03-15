@@ -14,26 +14,18 @@ import { useFocusEffect, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
-import StorybookCard from "@/components/StorybookCard";
-import { Storybook, getStorybooks, deleteStorybook } from "@/lib/storage";
+import LibraryCard from "@/components/LibraryCard";
+import { LibraryBook, getLibraryBooks, deleteLibraryBook } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
-  const [books, setBooks] = useState<Storybook[]>([]);
+  const { user, logout } = useAuth();
+  const [books, setBooks] = useState<LibraryBook[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!authLoading && !isAuthenticated) {
-        router.push("/(auth)/login");
-      }
-    }, [authLoading, isAuthenticated])
-  );
-
   const loadBooks = useCallback(async () => {
-    const data = await getStorybooks();
+    const data = await getLibraryBooks();
     setBooks(data);
   }, []);
 
@@ -52,14 +44,14 @@ export default function HomeScreen() {
   const handleDelete = (id: string) => {
     Alert.alert(
       "Delete Storybook",
-      "Are you sure you want to delete this storybook?",
+      "Are you sure you want to delete this storybook? This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            await deleteStorybook(id);
+            await deleteLibraryBook(id);
             loadBooks();
           },
         },
@@ -67,14 +59,8 @@ export default function HomeScreen() {
     );
   };
 
-  const handlePress = (book: Storybook) => {
-    if (book.status === "processing" || book.status === "pending") {
-      router.push({ pathname: "/progress/[id]", params: { id: book.id } });
-    } else if (book.status === "done") {
-      router.push({ pathname: "/detail/[id]", params: { id: book.id } });
-    } else {
-      router.push({ pathname: "/progress/[id]", params: { id: book.id } });
-    }
+  const handlePress = (book: LibraryBook) => {
+    router.push(`/library/${book.id}` as any);
   };
 
   return (
@@ -138,6 +124,7 @@ export default function HomeScreen() {
         <FlatList
           data={books}
           keyExtractor={(item) => item.id}
+          numColumns={2}
           contentContainerStyle={[styles.list, { paddingBottom: Platform.OS === "web" ? 34 + 84 : 100 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -145,17 +132,17 @@ export default function HomeScreen() {
           }
           ListHeaderComponent={
             <Text style={styles.sectionTitle}>
-              Your Storybooks ({books.length})
+              Your Library ({books.length})
             </Text>
           }
           renderItem={({ item }) => (
-            <StorybookCard
+            <LibraryCard
               book={item}
               onPress={() => handlePress(item)}
               onDelete={() => handleDelete(item.id)}
             />
           )}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          columnWrapperStyle={styles.row}
         />
       )}
     </View>
@@ -201,14 +188,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   list: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 14,
     paddingTop: 4,
+  },
+  row: {
+    justifyContent: "flex-start",
   },
   sectionTitle: {
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textSecondary,
-    marginBottom: 12,
+    marginBottom: 6,
+    marginLeft: 6,
   },
   emptyContainer: {
     flex: 1,

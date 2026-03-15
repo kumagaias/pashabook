@@ -6,18 +6,38 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { Platform } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
-import { AuthProvider } from "@/lib/auth-context";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { LanguageProvider } from "@/lib/language-context";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
+  const { isAuthenticated, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === "(auth)";
+
+    if (!isAuthenticated && !inAuthGroup) {
+      // Redirect to login if not authenticated
+      router.replace("/(auth)/login");
+    } else if (isAuthenticated && inAuthGroup) {
+      // Redirect to home if authenticated
+      router.replace("/(tabs)");
+    }
+  }, [isAuthenticated, isLoading, segments]);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
@@ -45,6 +65,22 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  // Web用のアイコンフォント読み込み（クライアントサイドのみ）
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const style = document.createElement('style');
+      style.textContent = `
+        @font-face {
+          font-family: 'Ionicons';
+          src: url('https://unpkg.com/ionicons@7.1.0/dist/fonts/ionicons.ttf') format('truetype');
+          font-weight: normal;
+          font-style: normal;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
+
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
@@ -57,11 +93,13 @@ export default function RootLayout() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <GestureHandlerRootView>
-            <KeyboardProvider>
-              <RootLayoutNav />
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+          <LanguageProvider>
+            <GestureHandlerRootView>
+              <KeyboardProvider>
+                <RootLayoutNav />
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </LanguageProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
