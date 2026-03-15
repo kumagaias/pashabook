@@ -11,7 +11,6 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { Platform } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
@@ -64,22 +63,6 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
-
-  // Web用のアイコンフォント読み込み（クライアントサイドのみ）
-  useEffect(() => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const style = document.createElement('style');
-      style.textContent = `
-        @font-face {
-          font-family: 'Ionicons';
-          src: url('https://unpkg.com/ionicons@7.1.0/dist/fonts/ionicons.ttf') format('truetype');
-          font-weight: normal;
-          font-style: normal;
-        }
-      `;
-      document.head.appendChild(style);
-    }
-  }, []);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
