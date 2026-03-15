@@ -42,11 +42,6 @@ export class IllustrationGenerator {
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i];
         
-        // Add delay before each request (including first one) to avoid rate limiting
-        if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-        
         const illustration = await this.generateSingleIllustrationWithRetry(page, style, characters, jobId);
         illustrations.push(illustration);
       }
@@ -90,10 +85,11 @@ export class IllustrationGenerator {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         
-        // Check if it's a 429 error
-        if (lastError.message.includes('429')) {
-          const delay = Math.pow(2, attempt) * 5000; // 5s, 10s, 20s
-          console.log(`Rate limited on page ${page.pageNumber}, retrying after ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        // Check if it's a 429 (quota exceeded) error
+        if (lastError.message.includes('429') || lastError.message.includes('Quota exceeded')) {
+          // Wait 60 seconds for quota to reset (per-minute quota)
+          const delay = 60000; // 60 seconds
+          console.log(`Quota exceeded on page ${page.pageNumber}, waiting ${delay}ms for quota reset (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           // Non-rate-limit error, don't retry
