@@ -27,15 +27,6 @@
             "value": "public, max-age=31536000, immutable"
           }
         ]
-      },
-      {
-        "source": "!(**/*.@(js|css|woff|woff2|ttf|eot|svg|png|jpg|jpeg|gif|ico|json))",
-        "headers": [
-          {
-            "key": "WWW-Authenticate",
-            "value": "Basic realm=\"Pashabook Demo\""
-          }
-        ]
       }
     ]
   }
