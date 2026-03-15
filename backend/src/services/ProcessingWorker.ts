@@ -76,42 +76,26 @@ export class ProcessingWorker {
 
       // Stage 2.5: Illustration Generation (Imagen 3)
       console.log(`[${jobId}] Starting illustration generation`);
-      const illustrations: Illustration[] = [];
-      const totalPages = story.pages.length;
+      await this.updateJob(jobId, {
+        currentStage: 'illustrating',
+        progressPercentage: 30,
+      });
       
-      for (let i = 0; i < totalPages; i++) {
-        const page = story.pages[i];
-        console.log(`[${jobId}] Generating illustration ${i + 1}/${totalPages}`);
-        
-        // Update progress with detail
-        const progressPercent = 30 + Math.floor((i / totalPages) * 20);
-        await this.updateJob(jobId, {
-          currentStage: 'illustrating',
-          progressPercentage: progressPercent,
-          progressDetail: `${i + 1}/${totalPages}`,
-        });
-        
-        // Generate single illustration
-        const illustration = await this.retryWithBackoff(
-          async () => {
-            const result = await this.illustrationGenerator.generateAll(
-              [page],
-              analysis.style,
-              analysis.characters,
-              jobId
-            );
-            return result[0];
-          },
-          3
-        );
-        illustrations.push(illustration);
-      }
+      // Generate all illustrations at once (generateAll handles the loop internally)
+      const illustrations = await this.retryWithBackoff(
+        () => this.illustrationGenerator.generateAll(
+          story.pages,
+          analysis.style,
+          analysis.characters,
+          jobId
+        ),
+        3
+      );
       
       await this.updateJob(jobId, {
         illustrationUrls: illustrations.map(ill => ill.imageUrl),
         currentStage: 'narrating',
         progressPercentage: 50,
-        progressDetail: null,
       });
 
       // Stage 3: Sequential execution of Narration and Animation with progress tracking
@@ -212,48 +196,55 @@ export class ProcessingWorker {
        * Generates narrations for all pages with progress tracking
        * Updates progress from 50% to 70% as pages are narrated
        */
-      private async generateNarrations(
-        pages: any[],
-        language: Language,
-        jobId: string,
-        totalPages: number
-      ): Promise<any[]> {
-        const narrations = [];
+      /**
+         * Generates narrations for all pages with progress tracking
+         * Updates progress from 50% to 70% as pages are narrated
+         */
+        private async generateNarrations(
+          pages: any[],
+          language: Language,
+          jobId: string,
+          totalPages: number
+        ): Promise<any[]> {
+          const narrations = [];
 
-        for (let i = 0; i < totalPages; i++) {
-          const page = pages[i];
-
-          // Update progress with detail
-          const progressPercent = 50 + Math.floor((i / totalPages) * 20);
-          await this.updateJob(jobId, {
-            currentStage: 'narrating',
-            progressPercentage: progressPercent,
-            progressDetail: `${i + 1}/${totalPages}`,
-          });
-
-          // Generate narration for this page
-          const segments = page.narrationSegments && page.narrationSegments.length > 0
-            ? page.narrationSegments
-            : [{ text: page.narrationText, speaker: 'narrator' }];
-
+          // Get character voice map once at the start
           const characterVoiceMap = await this.getCharacterVoiceMap(jobId);
 
-          const narration = await this.retryWithBackoff(
-            () => this.narrationGenerator.generatePerPage(
-              segments,
-              language,
-              page.pageNumber,
-              jobId,
-              characterVoiceMap
-            ),
-            3
-          );
+          for (let i = 0; i < totalPages; i++) {
+            const page = pages[i];
 
-          narrations.push(narration);
+            // Update progress every 2 pages to reduce Firestore writes
+            if (i % 2 === 0 || i === totalPages - 1) {
+              const progressPercent = 50 + Math.floor((i / totalPages) * 20);
+              await this.updateJob(jobId, {
+                currentStage: 'narrating',
+                progressPercentage: progressPercent,
+                progressDetail: `${i + 1}/${totalPages}`,
+              });
+            }
+
+            // Generate narration for this page
+            const segments = page.narrationSegments && page.narrationSegments.length > 0
+              ? page.narrationSegments
+              : [{ text: page.narrationText, speaker: 'narrator' }];
+
+            const narration = await this.retryWithBackoff(
+              () => this.narrationGenerator.generatePerPage(
+                segments,
+                language,
+                page.pageNumber,
+                jobId,
+                characterVoiceMap
+              ),
+              3
+            );
+
+            narrations.push(narration);
+          }
+
+          return narrations;
         }
-
-        return narrations;
-      }
 
     /**
      * Retrieves the character voice map from Firestore
@@ -276,54 +267,60 @@ export class ProcessingWorker {
      * Generates animations for all pages with progress tracking
      * Updates progress from 70% to 90% as animations are created
      */
-    private async generateAnimations(
-      pages: any[],
-      illustrations: any[],
-      jobId: string
-    ): Promise<any[]> {
-      const animations = [];
-      const totalPages = pages.length;
+    /**
+       * Generates animations for all pages with progress tracking
+       * Updates progress from 70% to 90% as animations are created
+       */
+      private async generateAnimations(
+        pages: any[],
+        illustrations: any[],
+        jobId: string
+      ): Promise<any[]> {
+        const animations = [];
+        const totalPages = pages.length;
 
-      for (let i = 0; i < totalPages; i++) {
-        const page = pages[i];
-        const illustration = illustrations[i];
+        for (let i = 0; i < totalPages; i++) {
+          const page = pages[i];
+          const illustration = illustrations[i];
 
-        // Update progress with detail
-        const progressPercent = 70 + Math.floor((i / totalPages) * 20);
-        await this.updateJob(jobId, {
-          currentStage: 'animating',
-          progressPercentage: progressPercent,
-          progressDetail: `${i + 1}/${totalPages}`,
-        });
+          // Update progress every 2 pages to reduce Firestore writes
+          if (i % 2 === 0 || i === totalPages - 1) {
+            const progressPercent = 70 + Math.floor((i / totalPages) * 20);
+            await this.updateJob(jobId, {
+              currentStage: 'animating',
+              progressPercentage: progressPercent,
+              progressDetail: `${i + 1}/${totalPages}`,
+            });
+          }
 
-        if (page.animationMode === 'highlight') {
-          const animation = await this.retryWithBackoff(
-            () =>
-              this.animationEngine.animateHighlightPage(
-                illustration,
-                page.imagePrompt,
-                page.estimatedDuration,
-                jobId
-              ),
-            2
-          );
-          animations.push(animation);
-        } else {
-          const animation = await this.retryWithBackoff(
-            () =>
-              this.animationEngine.animateStandardPage(
-                illustration,
-                page.estimatedDuration,
-                jobId
-              ),
-            2
-          );
-          animations.push(animation);
+          if (page.animationMode === 'highlight') {
+            const animation = await this.retryWithBackoff(
+              () =>
+                this.animationEngine.animateHighlightPage(
+                  illustration,
+                  page.imagePrompt,
+                  page.estimatedDuration,
+                  jobId
+                ),
+              2
+            );
+            animations.push(animation);
+          } else {
+            const animation = await this.retryWithBackoff(
+              () =>
+                this.animationEngine.animateStandardPage(
+                  illustration,
+                  page.estimatedDuration,
+                  jobId
+                ),
+              2
+            );
+            animations.push(animation);
+          }
         }
-      }
 
-      return animations;
-    }
+        return animations;
+      }
 
   /**
    * Retries a function with exponential backoff
