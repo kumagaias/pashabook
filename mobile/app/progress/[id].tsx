@@ -130,6 +130,7 @@ export default function ProgressScreen() {
       if (jobStatus.progress) {
         updatedBook.currentStep = mapStageToStep(jobStatus.progress.stage);
         updatedBook.progress = jobStatus.progress.percentage;
+        updatedBook.progressDetail = jobStatus.progress.detail;
       }
 
       // Update queue position (only when pending and position > 0)
@@ -391,6 +392,9 @@ export default function ProgressScreen() {
             </View>
             <Text style={styles.stepTitle}>{stepTitle}</Text>
             <Text style={styles.stepDescription}>{stepDesc}</Text>
+            {book.progressDetail && (
+              <Text style={styles.progressDetail}>{book.progressDetail}</Text>
+            )}
           </View>
 
           <View style={styles.progressInfo}>
@@ -621,6 +625,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     color: Colors.textSecondary,
     textAlign: "center",
+  },
+  progressDetail: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.primary,
+    textAlign: "center",
+    marginTop: 8,
   },
   progressInfo: {
     gap: 12,

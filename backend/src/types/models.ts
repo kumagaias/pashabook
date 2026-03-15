@@ -37,6 +37,7 @@ export interface Job {
   // Progress tracking
   currentStage?: ProcessingStage;
   progressPercentage?: number;
+  progressDetail?: string; // e.g., "Generating illustration 3/5"
   
   // Error handling
   error?: string;

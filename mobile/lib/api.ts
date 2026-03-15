@@ -91,6 +91,7 @@ export interface JobStatus {
   progress?: {
     stage: "analyzing" | "generating" | "illustrating" | "animating" | "narrating" | "composing";
     percentage: number;
+    detail?: string; // e.g., "3/5" for page-by-page progress
   };
   queuePosition?: number; // Present when status is 'pending' and position > 0
   result?: {

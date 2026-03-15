@@ -121,6 +121,11 @@ router.get('/:jobId', verifyFirebaseToken, async (req: AuthRequest, res) => {
         stage: job.currentStage,
         percentage: job.progressPercentage,
       };
+      
+      // Add progressDetail if available
+      if (job.progressDetail) {
+        response.progress.detail = job.progressDetail;
+      }
     }
 
     // Add result information if job is done

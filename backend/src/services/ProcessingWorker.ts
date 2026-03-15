@@ -6,7 +6,7 @@ import { IllustrationGenerator } from './IllustrationGenerator';
 import { NarrationGenerator } from './NarrationGenerator';
 import { AnimationEngine } from './AnimationEngine';
 import { VideoCompositor } from './VideoCompositor';
-import { Job } from '../types/models';
+import { Job, Illustration, Language } from '../types/models';
 
 export class ProcessingWorker {
   private firestore: Firestore;
@@ -75,54 +75,64 @@ export class ProcessingWorker {
       });
 
       // Stage 2.5: Illustration Generation (Imagen 3)
-      // Note: This is the fallback method. Primary method is Gemini 2.5 Flash Image interleaved output (Task 34)
       console.log(`[${jobId}] Starting illustration generation`);
-      const illustrations = await this.retryWithBackoff(
-        () => this.illustrationGenerator.generateAll(story.pages, analysis.style, analysis.characters, jobId),
-        3
-      );
+      const illustrations: Illustration[] = [];
+      const totalPages = story.pages.length;
+      
+      for (let i = 0; i < totalPages; i++) {
+        const page = story.pages[i];
+        console.log(`[${jobId}] Generating illustration ${i + 1}/${totalPages}`);
+        
+        // Update progress with detail
+        const progressPercent = 30 + Math.floor((i / totalPages) * 20);
+        await this.updateJob(jobId, {
+          currentStage: 'illustrating',
+          progressPercentage: progressPercent,
+          progressDetail: `${i + 1}/${totalPages}`,
+        });
+        
+        // Generate single illustration
+        const illustration = await this.retryWithBackoff(
+          async () => {
+            const result = await this.illustrationGenerator.generateAll(
+              [page],
+              analysis.style,
+              analysis.characters,
+              jobId
+            );
+            return result[0];
+          },
+          3
+        );
+        illustrations.push(illustration);
+      }
       
       await this.updateJob(jobId, {
         illustrationUrls: illustrations.map(ill => ill.imageUrl),
         currentStage: 'narrating',
         progressPercentage: 50,
+        progressDetail: null,
       });
 
-      // Stage 3: Parallel execution of Narration and Animation
-      // Pipeline order: Analysis → Story (with estimation) → Parallel(Narration + Animation) → Composition
-      console.log(`[${jobId}] Starting parallel narration and animation generation`);
-      console.log(`[${jobId}] Using estimated durations for animation:`, estimatedDurations);
+      // Stage 3: Sequential execution of Narration and Animation with progress tracking
+      console.log(`[${jobId}] Starting narration generation`);
       
-      // Execute narration and animation in parallel using Promise.all()
-      // CRITICAL: Both promises must resolve before proceeding to composition
-      // CRITICAL: Ensure actualDurations from TTS are available before composition
-      // Handle partial failures: if one promise rejects, cancel the other
-      let pageNarrations: any[];
-      let animationClips: any[];
+      // Generate narrations with progress tracking (50-70%)
+      const pageNarrations = await this.generateNarrations(
+        story.pages,
+        job.language,
+        jobId,
+        story.pages.length
+      );
       
-      try {
-        // Use Promise.all to execute narration and animation in parallel
-        // AnimationEngine uses estimatedDurations from StoryGenerator
-        // NarrationGenerator produces actualDurations from TTS
-        // Both must complete successfully before proceeding to VideoCompositor
-        [pageNarrations, animationClips] = await Promise.all([
-          this.retryWithBackoff(
-            () => this.narrationGenerator.generateAll(story.pages, job.language, jobId),
-            3
-          ),
-          this.generateAnimations(
-            story.pages,
-            illustrations,
-            jobId
-          ),
-        ]);
-        
-        console.log(`[${jobId}] Parallel execution completed successfully`);
-      } catch (error) {
-        // If either narration or animation fails, both are cancelled by Promise.all
-        console.error(`[${jobId}] Parallel execution failed:`, error);
-        throw new Error(`Failed during parallel narration and animation generation: ${error instanceof Error ? error.message : String(error)}`);
-      }
+      console.log(`[${jobId}] Starting animation generation`);
+      
+      // Generate animations with progress tracking (70-90%)
+      const animationClips = await this.generateAnimations(
+        story.pages,
+        illustrations,
+        jobId
+      );
 
       // Extract actual durations from narration results
       // CRITICAL: actualDurations must be available before VideoCompositor starts
@@ -143,8 +153,14 @@ export class ProcessingWorker {
         progressPercentage: 90,
       });
 
-      // Stage 5: Video Composition
+      // Stage 5: Video Composition with progress tracking
       console.log(`[${jobId}] Starting video composition`);
+      await this.updateJob(jobId, {
+        currentStage: 'composing',
+        progressPercentage: 90,
+        progressDetail: 'Compositing video...',
+      });
+      
       const finalVideo = await this.retryWithBackoff(
         () => this.videoCompositor.compose(
           animationClips, 
@@ -163,6 +179,7 @@ export class ProcessingWorker {
         status: 'done',
         currentStage: undefined,
         progressPercentage: 100,
+        progressDetail: null,
       });
 
       console.log(`[${jobId}] Processing completed successfully`);
@@ -187,40 +204,126 @@ export class ProcessingWorker {
    * Generates animations for all pages using estimated durations
    * This enables parallel execution with NarrationGenerator
    */
-  private async generateAnimations(
-    pages: any[],
-    illustrations: any[],
-    jobId: string
-  ): Promise<any[]> {
-    const animationPromises = pages.map(async (page, index) => {
-      const illustration = illustrations[index];
+  /**
+     * Generates narrations for all pages with progress tracking
+     * Updates progress from 50% to 70% as pages are narrated
+     */
+    /**
+       * Generates narrations for all pages with progress tracking
+       * Updates progress from 50% to 70% as pages are narrated
+       */
+      private async generateNarrations(
+        pages: any[],
+        language: Language,
+        jobId: string,
+        totalPages: number
+      ): Promise<any[]> {
+        const narrations = [];
 
-      if (page.animationMode === 'highlight') {
-        return await this.retryWithBackoff(
-          () =>
-            this.animationEngine.animateHighlightPage(
-              illustration,
-              page.imagePrompt,
-              page.estimatedDuration,
-              jobId
+        for (let i = 0; i < totalPages; i++) {
+          const page = pages[i];
+
+          // Update progress with detail
+          const progressPercent = 50 + Math.floor((i / totalPages) * 20);
+          await this.updateJob(jobId, {
+            currentStage: 'narrating',
+            progressPercentage: progressPercent,
+            progressDetail: `${i + 1}/${totalPages}`,
+          });
+
+          // Generate narration for this page
+          const segments = page.narrationSegments && page.narrationSegments.length > 0
+            ? page.narrationSegments
+            : [{ text: page.narrationText, speaker: 'narrator' }];
+
+          const characterVoiceMap = await this.getCharacterVoiceMap(jobId);
+
+          const narration = await this.retryWithBackoff(
+            () => this.narrationGenerator.generatePerPage(
+              segments,
+              language,
+              page.pageNumber,
+              jobId,
+              characterVoiceMap
             ),
-          2
-        );
-      } else {
-        return await this.retryWithBackoff(
-          () =>
-            this.animationEngine.animateStandardPage(
-              illustration,
-              page.estimatedDuration,
-              jobId
-            ),
-          2
-        );
+            3
+          );
+
+          narrations.push(narration);
+        }
+
+        return narrations;
       }
-    });
 
-    return await Promise.all(animationPromises);
-  }
+    /**
+     * Retrieves the character voice map from Firestore
+     */
+    private async getCharacterVoiceMap(jobId: string): Promise<any> {
+      try {
+        const jobDoc = await this.firestore.collection('jobs').doc(jobId).get();
+        if (!jobDoc.exists) {
+          return {};
+        }
+        const jobData = jobDoc.data();
+        return jobData?.characterVoiceMap || {};
+      } catch (error) {
+        console.error(`Failed to retrieve character voice map for job ${jobId}:`, error);
+        return {};
+      }
+    }
+
+    /**
+     * Generates animations for all pages with progress tracking
+     * Updates progress from 70% to 90% as animations are created
+     */
+    private async generateAnimations(
+      pages: any[],
+      illustrations: any[],
+      jobId: string
+    ): Promise<any[]> {
+      const animations = [];
+      const totalPages = pages.length;
+
+      for (let i = 0; i < totalPages; i++) {
+        const page = pages[i];
+        const illustration = illustrations[i];
+
+        // Update progress with detail
+        const progressPercent = 70 + Math.floor((i / totalPages) * 20);
+        await this.updateJob(jobId, {
+          currentStage: 'animating',
+          progressPercentage: progressPercent,
+          progressDetail: `${i + 1}/${totalPages}`,
+        });
+
+        if (page.animationMode === 'highlight') {
+          const animation = await this.retryWithBackoff(
+            () =>
+              this.animationEngine.animateHighlightPage(
+                illustration,
+                page.imagePrompt,
+                page.estimatedDuration,
+                jobId
+              ),
+            2
+          );
+          animations.push(animation);
+        } else {
+          const animation = await this.retryWithBackoff(
+            () =>
+              this.animationEngine.animateStandardPage(
+                illustration,
+                page.estimatedDuration,
+                jobId
+              ),
+            2
+          );
+          animations.push(animation);
+        }
+      }
+
+      return animations;
+    }
 
   /**
    * Retries a function with exponential backoff
@@ -285,30 +388,40 @@ export class ProcessingWorker {
   /**
    * Updates job status
    */
-  private async updateJobStatus(
-    jobId: string,
-    status: string,
-    currentStage?: string,
-    progressPercentage?: number,
-    error?: string
-  ): Promise<void> {
-    const updates: any = {
-      status,
-      updatedAt: new Date(),
-    };
+  /**
+     * Updates job status
+     */
+    private async updateJobStatus(
+      jobId: string,
+      status: string,
+      currentStage?: string,
+      progressPercentage?: number,
+      error?: string,
+      progressDetail?: string
+    ): Promise<void> {
+      const updates: any = {
+        status,
+        updatedAt: new Date(),
+      };
 
-    if (currentStage !== undefined) {
-      updates.currentStage = currentStage;
-    }
-    if (progressPercentage !== undefined) {
-      updates.progressPercentage = progressPercentage;
-    }
-    if (error !== undefined) {
-      updates.error = error;
-    }
+      if (currentStage !== undefined) {
+        updates.currentStage = currentStage;
+      }
+      if (progressPercentage !== undefined) {
+        updates.progressPercentage = progressPercentage;
+      }
+      if (error !== undefined) {
+        updates.error = error;
+      }
+      if (progressDetail !== undefined) {
+        updates.progressDetail = progressDetail;
+      } else {
+        // Clear progressDetail when not provided
+        updates.progressDetail = null;
+      }
 
-    await this.firestore.collection('jobs').doc(jobId).update(updates);
-  }
+      await this.firestore.collection('jobs').doc(jobId).update(updates);
+    }
 
   /**
    * Updates job with partial data

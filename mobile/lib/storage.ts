@@ -21,6 +21,7 @@ export interface Storybook {
   status: "pending" | "processing" | "done" | "error";
   currentStep: string;
   progress: number;
+  progressDetail?: string; // e.g., "3/5" for page-by-page progress
   queuePosition?: number; // Present when status is 'pending' and position > 0
   errorMessage?: string;
   pages: StoryPage[];
